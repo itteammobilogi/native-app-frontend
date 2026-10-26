@@ -1,26 +1,39 @@
 {
   "expo": {
-    "name": "zillybuy-app",
+    "name": "ZillyBuy",
     "slug": "zillybuy-app",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./assets/images/icon.png",
-    "scheme": "zillybuyapp",
+    "icon": "./assets/brand/icon.png",
+    "scheme": "zillybuy",
     "userInterfaceStyle": "automatic",
     "ios": {
-      "icon": "./assets/expo.icon"
+      "icon": "./assets/brand/AppIcon.icon",
+      "bundleIdentifier": "com.zillybuy.app",
+      "supportsTablet": false,
+      "infoPlist": {
+        "LSApplicationQueriesSchemes": [
+          "upi",
+          "phonepe",
+          "paytmmp",
+          "tez",
+          "gpay",
+          "credpay",
+          "bhim"
+        ]
+      }
     },
     "android": {
+      "package": "com.zillybuy.app",
       "adaptiveIcon": {
-        "backgroundColor": "#E6F4FE",
-        "foregroundImage": "./assets/images/android-icon-foreground.png",
-        "backgroundImage": "./assets/images/android-icon-background.png",
-        "monochromeImage": "./assets/images/android-icon-monochrome.png"
+        "backgroundColor": "#FFFFFF",
+        "foregroundImage": "./assets/brand/adaptive-foreground.png",
+        "monochromeImage": "./assets/brand/adaptive-foreground.png"
       },
       "predictiveBackGestureEnabled": false
     },
     "web": {
-      "output": "server",
+      "output": "single",
       "favicon": "./assets/images/favicon.png"
     },
     "plugins": [
@@ -28,15 +41,47 @@
       [
         "expo-splash-screen",
         {
-          "backgroundColor": "#208AEF",
-          "image": "./assets/images/splash-icon.png",
-          "imageWidth": 76
+          "backgroundColor": "#060A1C",
+          "image": "./assets/brand/splash-blank.png",
+          "imageWidth": 1,
+          "dark": {
+            "backgroundColor": "#060A1C",
+            "image": "./assets/brand/splash-blank.png"
+          }
         }
-      ]
+      ],
+      "expo-font",
+      "expo-image",
+      "expo-status-bar",
+      "expo-web-browser",
+      "expo-secure-store",
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "ZillyBuy needs access to your photos so you can add them to product reviews.",
+          "cameraPermission": false,
+          "microphonePermission": false
+        }
+      ],
+      [
+        "expo-notifications",
+        {
+          "color": "#0066CC",
+          "defaultChannel": "default"
+        }
+      ],
+      "expo-sharing"
     ],
     "experiments": {
       "typedRoutes": true,
       "reactCompiler": true
-    }
+    },
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "64f69188-63f5-4bd6-8783-9a91e9eb5d29"
+      }
+    },
+    "owner": "shaikh_akbar"
   }
 }
