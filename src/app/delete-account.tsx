@@ -2,7 +2,6 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 import { router, useFocusEffect } from 'expo-router';
 import { useCallback, useState } from 'react';
 import { KeyboardAvoidingView, Linking, Platform, ScrollView, StyleSheet, View } from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import {
   cancelDeletion,
@@ -20,6 +19,7 @@ import { SUPPORT } from '@/core/api/support';
 import { useAuth } from '@/core/auth/AuthContext';
 import { Button } from '@/ui/Button';
 import { Glass } from '@/ui/Glass';
+import { usePageInsets } from '@/ui/GlassTabBar';
 import { Input } from '@/ui/Input';
 import { Header, Screen } from '@/ui/Screen';
 import { Text } from '@/ui/Text';
@@ -51,7 +51,7 @@ function sentToLine(channel: string | null, maskedMobile: string | null, maskedE
 
 export default function DeleteAccountScreen() {
   const t = usePalette();
-  const insets = useSafeAreaInsets();
+  const insets = usePageInsets();
   const toast = useToast();
   const { isLoggedIn, logout, refreshUser } = useAuth();
 
@@ -335,7 +335,7 @@ export default function DeleteAccountScreen() {
   };
 
   return (
-    <Screen>
+    <Screen tabBar="account">
       <Header title="Delete account" />
       <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
         <ScrollView

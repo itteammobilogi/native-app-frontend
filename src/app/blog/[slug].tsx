@@ -2,7 +2,6 @@ import { Image } from 'expo-image';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useMemo, useState } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, Share, StyleSheet, View } from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { WebView, type WebViewMessageEvent } from 'react-native-webview';
 
 import { authorPhoto, blogAsset, blogDate, getBlog, listBlogs } from '@/core/api/blogs';
@@ -11,6 +10,7 @@ import { useAsync } from '@/core/hooks/useAsync';
 import { openSiteLink } from '@/core/links';
 import { BlogCard } from '@/ui/BlogCard';
 import { IconButton, tap } from '@/ui/Button';
+import { usePageInsets } from '@/ui/GlassTabBar';
 import { ErrorState, Header, Screen, SectionTitle } from '@/ui/Screen';
 import { Skeleton } from '@/ui/Skeleton';
 import { Text } from '@/ui/Text';
@@ -74,7 +74,7 @@ const isOwnLoad = (url: string) => {
 export default function BlogScreen() {
   const { slug } = useLocalSearchParams<{ slug: string }>();
   const t = usePalette();
-  const insets = useSafeAreaInsets();
+  const insets = usePageInsets();
   const blog = useAsync(() => getBlog(slug), [slug]);
   const latest = useAsync(() => listBlogs(1, 6).then((r) => r.items.filter((p) => p.slug !== slug).slice(0, 4)), [slug]);
   const [height, setHeight] = useState(0);
@@ -91,7 +91,7 @@ export default function BlogScreen() {
 
   if (blog.error) {
     return (
-      <Screen>
+      <Screen tabBar="index">
         <Header title="Blog" />
         <ErrorState message={blog.error} onRetry={blog.reload} />
       </Screen>
@@ -103,7 +103,7 @@ export default function BlogScreen() {
   const updated = b?.updated_at && b.published_at && b.updated_at.slice(0, 10) > b.published_at.slice(0, 10);
 
   return (
-    <Screen>
+    <Screen tabBar="index">
       <Header title="Blog" right={b ? <IconButton icon="share-social-outline" label="Share" onPress={share} /> : undefined} />
       {!b ? (
         <View style={{ padding: 16, gap: 12 }}>

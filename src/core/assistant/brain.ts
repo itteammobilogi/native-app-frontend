@@ -1,7 +1,15 @@
 import type { Href } from 'expo-router';
 
-import { askAssistant, type ChatTurn } from '@/core/api/chatbot';
-import { DOMAIN_META, listProducts, type ProductSummary } from '@/core/api/catalog';
+import {
+  analyzeImage,
+  askAssistant,
+  type AiLanguage,
+  type AiOrderCard,
+  type AiReply,
+  type AiTicketOffer,
+  type ChatTurn,
+} from '@/core/api/chatbot';
+import { DOMAIN_META, listProducts, search, type ProductSummary } from '@/core/api/catalog';
 import { listOrders, type Order } from '@/core/api/orders';
 import { SUPPORT } from '@/core/api/support';
 
@@ -13,13 +21,26 @@ import { SUPPORT } from '@/core/api/support';
 export type Action =
   | { kind: 'send'; label: string; value: string; icon?: string }
   | { kind: 'go'; label: string; href: Href; icon?: string }
-  | { kind: 'url'; label: string; url: string; icon?: string };
+  | { kind: 'url'; label: string; url: string; icon?: string }
+  // Raises the support ticket the AI offered (the widget's "Raise a Ticket").
+  | { kind: 'ticket'; label: string; icon?: string };
 
 export type BotReply = {
   text: string;
   products?: ProductSummary[];
+  // "See all results" for the carousel.
+  productQuery?: string | null;
   orders?: Order[];
+  // AI order card: items, Ordered → Delivered stepper, arrival date.
+  order?: AiOrderCard | null;
   actions?: Action[];
+  // Tappable follow-ups sent as the next message.
+  suggestions?: string[];
+  // Applied filters (✓) and refinements above the products.
+  filters?: { label: string; selected: boolean }[];
+  // Hindi / Hinglish replies show "Replying in … · Translate".
+  language?: AiLanguage | null;
+  ticket?: AiTicketOffer | null;
   // Small line under the bubble, e.g. "Sign in to see order details".
   note?: string;
 };
@@ -335,12 +356,99 @@ export async function respond(raw: string, ctx: BrainContext): Promise<BotReply>
   }
 }
 
-// Starter prompts on the welcome screen.
+/* ------------------------------- AI reply ------------------------------- */
+
+// The AI picks buttons by key (/api/ai/chat/reply); the app owns the links.
+const AI_BUTTONS: Record<string, Action> = {
+  open_orders: { kind: 'go', label: 'My orders', href: '/orders', icon: 'cube-outline' },
+  open_cart: { kind: 'go', label: 'Open cart', href: '/cart', icon: 'bag-handle-outline' },
+  open_tickets: { kind: 'go', label: 'My tickets', href: '/tickets', icon: 'chatbubbles-outline' },
+  return_policy: { kind: 'go', label: 'Return policy', href: '/policy/return-policies', icon: 'document-text-outline' },
+  refund_policy: { kind: 'go', label: 'Refund & cancellation', href: '/policy/refund-cancellation-policies', icon: 'document-text-outline' },
+  shipping_policy: { kind: 'go', label: 'Shipping policy', href: '/policy/shipping-policies', icon: 'document-text-outline' },
+  browse_shop: { kind: 'go', label: 'Browse all products', href: '/products', icon: 'grid-outline' },
+  sign_in: { kind: 'go', label: 'Sign in', href: '/login', icon: 'log-in-outline' },
+};
+
+// The website widget's buildAiReplyResponse: one control per job, so the
+// order card's Track replaces "My orders" and Raise a Ticket replaces
+// "My tickets", and suggestions never repeat a button.
+export function fromAiReply(data: AiReply): BotReply {
+  const ticket = data.ticket?.orderId ? data.ticket : null;
+  const actions: Action[] = (data.buttons || [])
+    .filter((key) => !(data.order && key === 'open_orders') && !(ticket && key === 'open_tickets'))
+    .map((key) => AI_BUTTONS[key])
+    .filter(Boolean);
+  if (ticket) actions.unshift({ kind: 'ticket', label: 'Raise a ticket', icon: 'headset-outline' });
+
+  const labels = new Set(actions.map((a) => a.label.toLowerCase()));
+  const suggestions = data.order || ticket ? [] : (data.suggestions || []).filter((s) => !labels.has(String(s).toLowerCase()));
+
+  return {
+    text: data.reply,
+    products: (data.products || []).filter((p) => p?.slug),
+    productQuery: data.productQuery,
+    filters: Array.isArray(data.filters) ? data.filters : [],
+    order: data.order || null,
+    actions,
+    suggestions,
+    language: data.language || null,
+    ticket,
+  };
+}
+
+/* ----------------------------- Image search ----------------------------- */
+
+const IMAGE_FILLER =
+  /^(a|an|the)\s+|^(promotional|product|brand|official|advertisement|image|photo|picture)\s+(image|photo|picture)?\s*(for|of)\s+|\b(highlighting|featuring|showing|displaying|with|that)\b.*$/gi;
+
+// The widget's camera button: /api/ai/vision names the product, then the
+// catalog search tries the most specific name first (exact model), then
+// broader terms, until something is in stock.
+export async function imageReply(imageBase64: string, mimeType: string, caption?: string): Promise<BotReply> {
+  const seen = await analyzeImage(imageBase64, mimeType);
+  const tidy = (s?: string) => String(s || '').replace(IMAGE_FILLER, '').replace(/\s+/g, ' ').trim();
+  const candidates = [
+    caption ? `${tidy(seen.searchQuery)} ${caption}`.trim() : '',
+    tidy(seen.exactModel),
+    tidy(seen.searchQuery),
+    ...String(seen.keywords || '').split(/[,\n]+/).map(tidy),
+    [seen.color, seen.category].filter(Boolean).join(' '),
+    tidy(seen.category),
+  ].filter((q, i, all) => q && all.indexOf(q) === i);
+
+  for (const q of candidates.slice(0, 5)) {
+    const found = await search(q, 12)
+      .then((r) => r.products.filter((p) => !Number(p.is_unavailable)).slice(0, 8))
+      .catch(() => [] as ProductSummary[]);
+    if (found.length) {
+      const what = [seen.color, seen.brand, seen.category].filter(Boolean).join(' ').trim() || q;
+      return {
+        text: `Looks like ${/^[aeiou]/i.test(what) ? 'an' : 'a'} **${what}**. Here ${found.length === 1 ? 'is a match' : `are ${found.length} matches`} from the store.`,
+        products: found,
+        productQuery: q,
+        suggestions: [`${q} under ₹1000`, 'Show cheaper options'],
+      };
+    }
+  }
+
+  const named = tidy(seen.exactModel) || tidy(seen.searchQuery) || tidy(seen.category);
+  return {
+    text: named
+      ? `That looks like **${named}**, but I couldn't find it in stock right now. Try describing it, or browse a category.`
+      : "I couldn't make out a product in that photo. Try a clearer picture, or tell me what you're looking for.",
+    actions: CATEGORY_ACTIONS.slice(0, 4),
+  };
+}
+
+// Starter prompts on the welcome screen: the website's "Try asking" list,
+// each checked to return real products or open a working flow (the catalog
+// has accessories but no phones, so no phone prompts).
 export const STARTERS: { label: string; value: string; icon: string }[] = [
-  { label: 'Track my order', value: 'Track my latest order', icon: 'locate-outline' },
-  { label: 'Phones under ₹15k', value: 'Show me phones under 15000', icon: 'phone-portrait-outline' },
-  { label: 'Gift for mom', value: 'Suggest a gift for my mom', icon: 'gift-outline' },
-  { label: 'Return policy', value: 'How do returns work?', icon: 'refresh-outline' },
-  { label: '2000 tak ke earbuds', value: '2000 tak ke earbuds dikhao', icon: 'headset-outline' },
-  { label: 'Talk to support', value: 'Contact support', icon: 'chatbubbles-outline' },
+  { label: 'Earbuds under ₹1000', value: 'Earbuds under ₹1000', icon: 'headset-outline' },
+  { label: 'Smart watch under ₹2000', value: 'Smart watch under ₹2000', icon: 'watch-outline' },
+  { label: 'Pressure cooker', value: 'Pressure cooker', icon: 'restaurant-outline' },
+  { label: 'Face wash under ₹300', value: 'Face wash under ₹300', icon: 'water-outline' },
+  { label: 'Track my order', value: 'Track my order', icon: 'locate-outline' },
+  { label: 'Return policy', value: 'Return policy', icon: 'refresh-outline' },
 ];

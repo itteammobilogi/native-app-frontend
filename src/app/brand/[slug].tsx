@@ -40,7 +40,7 @@ export default function BrandScreen() {
   const name = brand?.name ?? slug.replace(/-/g, ' ');
 
   return (
-    <Screen>
+    <Screen tabBar="categories">
       <Header
         title={name}
         right={<IconButton icon="search" label="Search" onPress={() => router.push({ pathname: '/search', params: { q: name } })} />}

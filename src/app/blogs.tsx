@@ -1,9 +1,9 @@
 import { ActivityIndicator, FlatList, RefreshControl, View } from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { listBlogs } from '@/core/api/blogs';
 import { usePaged } from '@/core/hooks/useAsync';
 import { BlogCard } from '@/ui/BlogCard';
+import { usePageInsets } from '@/ui/GlassTabBar';
 import { EmptyState, ErrorState, Header, Screen } from '@/ui/Screen';
 import { Skeleton } from '@/ui/Skeleton';
 import { Text } from '@/ui/Text';
@@ -12,11 +12,11 @@ import { radius, usePalette } from '@/ui/theme';
 // Website: /blogs.
 export default function BlogsScreen() {
   const t = usePalette();
-  const insets = useSafeAreaInsets();
+  const insets = usePageInsets();
   const list = usePaged((page) => listBlogs(page), []);
 
   return (
-    <Screen>
+    <Screen tabBar="index">
       <Header title="ZillyBuy blog" />
       <FlatList
         data={list.items}

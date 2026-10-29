@@ -2,22 +2,37 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 import { router } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { StyleSheet, View, type StyleProp, type ViewStyle } from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { SafeAreaInsetsContext, useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Background } from './Background';
 import { Button, IconButton } from './Button';
 import { Glass } from './Glass';
+import { PageTabBar, tabBarSpace, type TabName } from './GlassTabBar';
+import { TabBarSpace } from './tabBarSpace';
 import { Text } from './Text';
 import { usePalette } from './theme';
 
-// Gradient backdrop + status bar for every screen.
-export function Screen({ children, style }: { children: React.ReactNode; style?: StyleProp<ViewStyle> }) {
+// Gradient backdrop + status bar for every screen. With `tabBar`, the page
+// also shows the bottom tab bar (that tab highlighted), and everything inside
+// sees a bottom inset that includes the bar, so content pads clear of it.
+export function Screen({ children, style, tabBar }: { children: React.ReactNode; style?: StyleProp<ViewStyle>; tabBar?: TabName }) {
   const t = usePalette();
+  const insets = useSafeAreaInsets();
+  const space = tabBar ? tabBarSpace(insets.bottom) : 0;
   return (
     <View style={[{ flex: 1 }, style]}>
       <StatusBar style={t.dark ? 'light' : 'dark'} />
       <Background />
-      {children}
+      {tabBar ? (
+        <>
+          <TabBarSpace.Provider value={space}>
+            <SafeAreaInsetsContext.Provider value={{ ...insets, bottom: insets.bottom + space }}>{children}</SafeAreaInsetsContext.Provider>
+          </TabBarSpace.Provider>
+          <PageTabBar active={tabBar} />
+        </>
+      ) : (
+        children
+      )}
     </View>
   );
 }

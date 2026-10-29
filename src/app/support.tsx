@@ -3,13 +3,13 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { router, useLocalSearchParams, type Href } from 'expo-router';
 import { useState } from 'react';
 import { KeyboardAvoidingView, Linking, Platform, Pressable, ScrollView, StyleSheet, View } from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { useAuth } from '@/core/auth/AuthContext';
 import { errorMessage } from '@/core/api/client';
 import { FAQ, POLICIES, sendContactMessage, SUPPORT, type PolicySlug } from '@/core/api/support';
 import { Button, tap } from '@/ui/Button';
 import { Glass } from '@/ui/Glass';
+import { usePageInsets } from '@/ui/GlassTabBar';
 import { Input } from '@/ui/Input';
 import { Header, Screen } from '@/ui/Screen';
 import { Text } from '@/ui/Text';
@@ -22,7 +22,7 @@ const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 // opened from an order's "Need help?".
 export default function SupportScreen() {
   const t = usePalette();
-  const insets = useSafeAreaInsets();
+  const insets = usePageInsets();
   const toast = useToast();
   const { user, isLoggedIn } = useAuth();
   const { order } = useLocalSearchParams<{ order?: string }>();
@@ -76,7 +76,7 @@ export default function SupportScreen() {
   ];
 
   return (
-    <Screen>
+    <Screen tabBar="account">
       <Header title="Help & support" />
       <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
         <ScrollView

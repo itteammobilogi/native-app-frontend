@@ -1,7 +1,6 @@
 import { router } from 'expo-router';
 import { useState } from 'react';
 import { KeyboardAvoidingView, Platform, ScrollView, View } from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { acceptAffiliateTerms, AffiliateError, getAffiliateMe, type AffiliateMe } from '@/core/api/affiliate';
 import { TERMS_VERSION } from '@/core/affiliateTerms';
@@ -14,6 +13,7 @@ import { JoinForm } from '@/ui/affiliate/JoinForm';
 import { PaymentDetails } from '@/ui/affiliate/PaymentDetails';
 import { Button, IconButton } from '@/ui/Button';
 import { Glass } from '@/ui/Glass';
+import { usePageInsets } from '@/ui/GlassTabBar';
 import { EmptyState, ErrorState, Header, Screen } from '@/ui/Screen';
 import { Skeleton } from '@/ui/Skeleton';
 import { Text } from '@/ui/Text';
@@ -25,7 +25,7 @@ import { useToast } from '@/ui/Toast';
 // details) → paused. Only invited users and affiliates get anything but 404;
 // the Account tab shows the entry only to them (profile.affiliate_status).
 export default function AffiliateScreen() {
-  const insets = useSafeAreaInsets();
+  const insets = usePageInsets();
   const toast = useToast();
   const { isLoggedIn } = useAuth();
   const [helpOpen, setHelpOpen] = useState(false);
@@ -131,7 +131,7 @@ export default function AffiliateScreen() {
   };
 
   return (
-    <Screen>
+    <Screen tabBar="account">
       <Header title="Affiliate" right={joined ? <IconButton icon="help-circle-outline" label="Need help" onPress={() => setHelpOpen(true)} /> : undefined} />
       <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
         <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={{ padding: 16, gap: 14, paddingBottom: insets.bottom + 32, flexGrow: 1 }}>

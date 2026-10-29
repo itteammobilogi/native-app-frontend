@@ -1,7 +1,6 @@
 import { useLocalSearchParams } from 'expo-router';
 import { useState } from 'react';
 import { ActivityIndicator, FlatList, RefreshControl, ScrollView, View } from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { getProductReviews, type ReviewSort, type ReviewSummary } from '@/core/api/reviews';
 import { usePaged } from '@/core/hooks/useAsync';
@@ -10,6 +9,7 @@ import { Chip } from '@/ui/Chip';
 import { Glass } from '@/ui/Glass';
 import { ReviewCard } from '@/ui/reviews/ReviewCard';
 import { RatingSummary } from '@/ui/reviews/ReviewsSection';
+import { usePageInsets } from '@/ui/GlassTabBar';
 import { EmptyState, ErrorState, Header, Screen } from '@/ui/Screen';
 import { Skeleton } from '@/ui/Skeleton';
 import { Text } from '@/ui/Text';
@@ -27,7 +27,7 @@ const SORTS: { value: ReviewSort; label: string }[] = [
 export default function AllReviewsScreen() {
   const { productId, name } = useLocalSearchParams<{ productId: string; name?: string }>();
   const t = usePalette();
-  const insets = useSafeAreaInsets();
+  const insets = usePageInsets();
   const votes = useReviewVotes();
   const [sort, setSort] = useState<ReviewSort>('recent');
   const [summary, setSummary] = useState<ReviewSummary | null>(null);
@@ -43,7 +43,7 @@ export default function AllReviewsScreen() {
   }, [productId, sort]);
 
   return (
-    <Screen>
+    <Screen tabBar="index">
       <Header title="Reviews" />
       <FlatList
         data={list.items}

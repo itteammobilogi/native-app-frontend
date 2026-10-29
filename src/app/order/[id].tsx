@@ -4,7 +4,6 @@ import { router, useLocalSearchParams } from 'expo-router';
 import * as WebBrowser from 'expo-web-browser';
 import { useState } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, View } from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import {
   canDownloadInvoice,
@@ -15,10 +14,13 @@ import {
   type ItemHistory,
   type OrderItem,
 } from '@/core/api/orders';
+import { attributeLabel } from '@/core/colourNames';
 import { useAsync } from '@/core/hooks/useAsync';
+import { useBuyAgain } from '@/core/hooks/useBuyAgain';
 import { formatINR } from '@/core/pricing';
 import { Button, tap } from '@/ui/Button';
 import { Glass } from '@/ui/Glass';
+import { usePageInsets } from '@/ui/GlassTabBar';
 import { humanize, OrderStatus } from '@/ui/OrderStatus';
 import { ErrorState, Header, Screen } from '@/ui/Screen';
 import { Skeleton } from '@/ui/Skeleton';
@@ -31,7 +33,7 @@ import { useToast } from '@/ui/Toast';
 export default function OrderDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const t = usePalette();
-  const insets = useSafeAreaInsets();
+  const insets = usePageInsets();
   const order = useAsync(() => listOrders().then((all) => all.find((o) => String(o.id) === id) ?? null), [id]);
   const tracking = useAsync(() => getTracking(Number(id)), [id]);
   const o = order.data;
@@ -51,7 +53,7 @@ export default function OrderDetailScreen() {
   };
 
   return (
-    <Screen>
+    <Screen tabBar="account">
       <Header title="Order details" />
       {order.loading ? (
         <View style={{ padding: 16, gap: 12 }}>
@@ -134,7 +136,18 @@ export default function OrderDetailScreen() {
 
 function ItemCard({ item }: { item: OrderItem }) {
   const t = usePalette();
+  const toast = useToast();
+  const { buyAgain, busyId } = useBuyAgain();
   const [open, setOpen] = useState(false);
+
+  const again = async () => {
+    try {
+      await buyAgain(item);
+      toast('Added to cart', 'success');
+    } catch (e) {
+      toast(e instanceof Error ? e.message : 'Could not add to cart', 'error');
+    }
+  };
   const [history, setHistory] = useState<ItemHistory[] | null>(null);
 
   const toggle = async () => {
@@ -157,7 +170,7 @@ function ItemCard({ item }: { item: OrderItem }) {
           </Text>
           {!!item.variant_attributes?.length && (
             <Text variant="caption" tone="muted">
-              {item.variant_attributes.map((a) => a.value).join(' · ')}
+              {attributeLabel(item.variant_attributes)}
             </Text>
           )}
           <Text variant="caption" tone="muted">
@@ -166,12 +179,17 @@ function ItemCard({ item }: { item: OrderItem }) {
           <OrderStatus state={item.isCancelled ? 'Cancelled' : item.fulfillmentState || 'Pending'} />
         </View>
       </View>
-      <Pressable onPress={toggle} style={styles.historyToggle}>
-        <Text variant="label" tone="primary">
-          {open ? 'Hide status history' : 'Show status history'}
-        </Text>
-        <Ionicons name={open ? 'chevron-up' : 'chevron-down'} size={16} color={t.primary} />
-      </Pressable>
+      <View style={styles.between}>
+        <Pressable onPress={toggle} style={styles.historyToggle}>
+          <Text variant="label" tone="primary">
+            {open ? 'Hide status history' : 'Show status history'}
+          </Text>
+          <Ionicons name={open ? 'chevron-up' : 'chevron-down'} size={16} color={t.primary} />
+        </Pressable>
+        {!!item.slug && (
+          <Button title="Buy again" icon="refresh" variant="glass" size="md" onPress={again} loading={busyId === item.id} />
+        )}
+      </View>
       {open &&
         (history === null ? (
           <ActivityIndicator color={t.primary} />

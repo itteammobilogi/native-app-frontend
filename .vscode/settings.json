@@ -1,4 +1,8 @@
 {
+  // tsconfig relies on Expo's base config (TS 5.5+ features); use the
+  // project's TypeScript rather than the one bundled with VS Code.
+  "typescript.tsdk": "node_modules/typescript/lib",
+  "typescript.enablePromptUseWorkspaceTsdk": true,
   "editor.codeActionsOnSave": {
     "source.fixAll": "explicit",
     "source.organizeImports": "explicit",

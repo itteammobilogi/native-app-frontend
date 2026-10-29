@@ -26,7 +26,7 @@ export default function CollectionScreen() {
   const items = filterLocally(list.items, filters);
 
   return (
-    <Screen>
+    <Screen tabBar="index">
       <Header title={title ?? slug.replace(/-/g, ' ')} />
       <ProductGrid
         {...list}

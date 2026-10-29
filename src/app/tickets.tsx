@@ -2,7 +2,6 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import { useCallback, useMemo, useRef, useState } from 'react';
 import { FlatList, Pressable, RefreshControl, ScrollView, StyleSheet, View } from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { listOrders } from '@/core/api/orders';
 import { listTickets, type Ticket } from '@/core/api/tickets';
@@ -12,6 +11,7 @@ import { formatRelativeTime } from '@/core/format';
 import { IconButton, tap } from '@/ui/Button';
 import { Chip } from '@/ui/Chip';
 import { Glass } from '@/ui/Glass';
+import { usePageInsets } from '@/ui/GlassTabBar';
 import { EmptyState, ErrorState, Header, Screen } from '@/ui/Screen';
 import { Skeleton } from '@/ui/Skeleton';
 import { Text } from '@/ui/Text';
@@ -31,7 +31,7 @@ const FILTERS = [
 // order, as the order screen's "Need help?" does.
 export default function TicketsScreen() {
   const t = usePalette();
-  const insets = useSafeAreaInsets();
+  const insets = usePageInsets();
   const { isLoggedIn } = useAuth();
   const { orderId } = useLocalSearchParams<{ orderId?: string }>();
   const [filter, setFilter] = useState('');
@@ -62,7 +62,7 @@ export default function TicketsScreen() {
 
   if (!isLoggedIn) {
     return (
-      <Screen>
+      <Screen tabBar="account">
         <Header title="Support tickets" />
         <EmptyState
           icon="chatbubbles-outline"
@@ -76,7 +76,7 @@ export default function TicketsScreen() {
   }
 
   return (
-    <Screen>
+    <Screen tabBar="account">
       <Header title="Support tickets" right={<IconButton icon="add" label="Raise a ticket" onPress={() => setFormOpen(true)} />} />
       <View>
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8, paddingHorizontal: 16, paddingBottom: 8 }}>

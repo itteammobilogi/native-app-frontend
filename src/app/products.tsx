@@ -38,7 +38,7 @@ export default function ProductsScreen() {
   }, [flag, filters]);
 
   return (
-    <Screen>
+    <Screen tabBar="index">
       <Header title={title ?? 'Products'} />
       <ProductGrid
         {...list}

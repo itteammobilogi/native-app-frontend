@@ -7,6 +7,7 @@ import { errorMessage } from '@/core/api/client';
 import { useAuth } from '@/core/auth/AuthContext';
 import { Button } from '@/ui/Button';
 import { Glass } from '@/ui/Glass';
+import { usePageInsets } from '@/ui/GlassTabBar';
 import { Input } from '@/ui/Input';
 import { Header, Screen } from '@/ui/Screen';
 import { Text } from '@/ui/Text';
@@ -16,6 +17,7 @@ import { useToast } from '@/ui/Toast';
 // Only name and date of birth are editable through /api/users/profile;
 // mobile and email changes need the OTP flows on the website.
 export default function ProfileEditScreen() {
+  const insets = usePageInsets();
   const toast = useToast();
   const { user, refreshUser } = useAuth();
   const [name, setName] = useState(user?.name ?? '');
@@ -41,9 +43,9 @@ export default function ProfileEditScreen() {
   };
 
   return (
-    <Screen>
+    <Screen tabBar="account">
       <Header title="Edit profile" />
-      <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={{ padding: 16, gap: 14 }}>
+      <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={{ padding: 16, gap: 14, paddingBottom: insets.bottom + 32 }}>
         <Glass radius={radius.lg} style={{ padding: 16, gap: 14 }}>
           <Input label="Full name" value={name} onChangeText={setName} autoComplete="name" />
           <Input

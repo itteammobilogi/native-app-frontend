@@ -5,7 +5,7 @@ import { ActivityIndicator, ScrollView, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { listAddresses, type Address } from '@/core/api/address';
-import { cartError, waitForSellers } from '@/core/api/cart';
+import { cartError, waitForSellers, type CartLine } from '@/core/api/cart';
 import { errorMessage } from '@/core/api/client';
 import { applyCoupon, createCashfreeOrder, submitBilling, type CouponResult } from '@/core/api/orders';
 import { useAuth } from '@/core/auth/AuthContext';
@@ -38,7 +38,7 @@ export default function CheckoutScreen() {
   const insets = useSafeAreaInsets();
   const toast = useToast();
   const { user, isLoggedIn } = useAuth();
-  const { cart, refresh } = useCart();
+  const { cart, refresh, remove } = useCart();
   const [addressId, setAddressId] = useState<number | null>(null);
   const [step, setStep] = useState<Step>('idle');
   const [couponInput, setCouponInput] = useState('');
@@ -145,6 +145,17 @@ export default function CheckoutScreen() {
 
   const busy = step !== 'idle';
 
+  const removeLine = async (line: CartLine) => {
+    try {
+      await remove(line);
+      // The coupon's discount was worked out on the old total.
+      setCoupon(null);
+      toast('Item removed from cart', 'success');
+    } catch (e: any) {
+      toast(e.message, 'error');
+    }
+  };
+
   if (!cart.products.length) {
     return (
       <Screen>
@@ -182,7 +193,7 @@ export default function CheckoutScreen() {
         )}
 
         {/* Items */}
-        <OrderSummary cart={cart} />
+        <OrderSummary cart={cart} onRemove={busy ? undefined : removeLine} />
 
         {/* Coupon */}
         <Glass radius={radius.lg} style={{ padding: 16, gap: 10 }}>

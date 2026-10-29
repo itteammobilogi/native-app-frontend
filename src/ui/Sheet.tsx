@@ -3,6 +3,7 @@ import { Keyboard, Modal, Platform, Pressable, StyleSheet, useWindowDimensions, 
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Glass } from './Glass';
+import { useTabBarSpace } from './tabBarSpace';
 import { Text } from './Text';
 import { radius, usePalette } from './theme';
 
@@ -38,7 +39,10 @@ export function Sheet({
   children: React.ReactNode;
 }) {
   const t = usePalette();
-  const insets = useSafeAreaInsets();
+  // The modal covers any page tab bar, so use the device's own bottom inset.
+  const safe = useSafeAreaInsets();
+  const barSpace = useTabBarSpace();
+  const insets = { ...safe, bottom: safe.bottom - barSpace };
   const { height: windowHeight } = useWindowDimensions();
   const keyboard = useKeyboardHeight();
 

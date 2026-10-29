@@ -9,6 +9,7 @@ import type { CartLine } from '@/core/api/cart';
 import { useAuth } from '@/core/auth/AuthContext';
 import { useCart } from '@/core/cart/CartContext';
 import { formatDeliveryDate } from '@/core/cartBreakup';
+import { attributeLabel } from '@/core/colourNames';
 import { formatINR } from '@/core/pricing';
 import { BillSummary } from '@/ui/BillSummary';
 import { Button, tap } from '@/ui/Button';
@@ -181,7 +182,7 @@ function CartRow({ line, onChange }: { line: CartLine; onChange: (q: number) => 
         </Text>
         {!!line.variant_attributes?.length && (
           <Text variant="caption" tone="muted" numberOfLines={1}>
-            {line.variant_attributes.map((a) => a.value).join(' · ')}
+            {attributeLabel(line.variant_attributes)}
           </Text>
         )}
         {status ? (

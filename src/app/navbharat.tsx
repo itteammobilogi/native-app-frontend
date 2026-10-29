@@ -86,7 +86,7 @@ export default function NavbharatScreen() {
   };
 
   return (
-    <Screen>
+    <Screen tabBar="index">
       <Header title="NavBharat" />
       <ProductGrid
         {...list}

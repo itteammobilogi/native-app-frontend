@@ -2,13 +2,11 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 import Constants from 'expo-constants';
 import { LinearGradient } from 'expo-linear-gradient';
 import { router, type Href } from 'expo-router';
-import * as WebBrowser from 'expo-web-browser';
 import { Alert, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import type { PolicySlug } from '@/core/api/support';
 import { useAuth } from '@/core/auth/AuthContext';
-import { WEBSITE_URL } from '@/core/config';
 import { getPushStatus, openNotificationSettings, syncPush } from '@/core/push';
 import { Button, tap } from '@/ui/Button';
 import { Glass } from '@/ui/Glass';
@@ -25,13 +23,13 @@ export default function AccountScreen() {
   const { user, isLoggedIn, logout } = useAuth();
   const toast = useToast();
 
-  const web = (path: string) => () => WebBrowser.openBrowserAsync(`${WEBSITE_URL}${path}`).catch(() => {});
   const go = (href: Href) => () => router.push(href);
 
   const shopping: Item[] = [
     { icon: 'receipt-outline', label: 'My orders', onPress: go('/orders') },
     { icon: 'location-outline', label: 'Saved addresses', onPress: go('/addresses') },
     { icon: 'person-outline', label: 'Edit profile', onPress: go('/profile-edit') },
+    { icon: 'notifications-outline', label: 'Notifications', onPress: go('/notifications') },
     { icon: 'chatbubbles-outline', label: 'Support tickets', onPress: go('/tickets') },
     // Invite-only, like the website's account sidebar.
     ...(user?.affiliate_status && user.affiliate_status !== 'none'
@@ -41,6 +39,7 @@ export default function AccountScreen() {
   const policy = (slug: PolicySlug) => go({ pathname: '/policy/[slug]', params: { slug } });
 
   const discover: Item[] = [
+    { icon: 'heart-outline', label: 'My wishlist', onPress: go('/wishlist') },
     { icon: 'flag-outline', label: 'NavBharat · Made in India', onPress: go('/navbharat') },
     { icon: 'pricetags-outline', label: 'Shop by brand', onPress: go('/brands') },
     { icon: 'gift-outline', label: 'ZillyCart combos', onPress: go('/combos') },
@@ -55,14 +54,13 @@ export default function AccountScreen() {
   };
 
   const support: Item[] = [
-    { icon: 'notifications-outline', label: 'Notifications', onPress: notifications },
+    { icon: 'notifications-circle-outline', label: 'Push notifications', onPress: notifications },
     { icon: 'help-circle-outline', label: 'Help & support', onPress: go('/support') },
     { icon: 'return-down-back-outline', label: 'Returns & refunds', onPress: policy('return-policies') },
     { icon: 'document-text-outline', label: 'Terms & conditions', onPress: policy('terms-and-conditions') },
     { icon: 'lock-closed-outline', label: 'Privacy policy', onPress: policy('privacy-policy') },
     { icon: 'information-circle-outline', label: 'About ZillyBuy', onPress: go('/about') },
     { icon: 'share-social-outline', label: 'Connect with us', onPress: go('/connect') },
-    { icon: 'globe-outline', label: 'Visit zillybuy.com', onPress: web('/') },
     { icon: 'trash-outline', label: 'Delete account', onPress: go('/delete-account') },
   ];
 

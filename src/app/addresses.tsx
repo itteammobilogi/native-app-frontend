@@ -1,7 +1,6 @@
 import { router, useFocusEffect } from 'expo-router';
 import { useCallback } from 'react';
 import { Alert, RefreshControl, ScrollView, View } from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { deleteAddress, listAddresses, setDefaultAddress, type Address } from '@/core/api/address';
 import { errorMessage } from '@/core/api/client';
@@ -9,6 +8,7 @@ import { useAuth } from '@/core/auth/AuthContext';
 import { useAsync } from '@/core/hooks/useAsync';
 import { AddressCard } from '@/ui/AddressCard';
 import { Button } from '@/ui/Button';
+import { usePageInsets } from '@/ui/GlassTabBar';
 import { EmptyState, ErrorState, Header, Screen } from '@/ui/Screen';
 import { Skeleton } from '@/ui/Skeleton';
 import { Text } from '@/ui/Text';
@@ -17,7 +17,7 @@ import { useToast } from '@/ui/Toast';
 
 export default function AddressesScreen() {
   const t = usePalette();
-  const insets = useSafeAreaInsets();
+  const insets = usePageInsets();
   const toast = useToast();
   const { user } = useAuth();
   const list = useAsync(() => (user ? listAddresses(user.id) : Promise.resolve([] as Address[])), [user?.id]);
@@ -58,7 +58,7 @@ export default function AddressesScreen() {
     ]);
 
   return (
-    <Screen>
+    <Screen tabBar="account">
       <Header title="Saved addresses" />
       {list.loading ? (
         <View style={{ padding: 16, gap: 12 }}>

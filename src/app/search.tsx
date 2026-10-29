@@ -79,7 +79,7 @@ export default function SearchScreen() {
   };
 
   return (
-    <Screen>
+    <Screen tabBar="index">
       <View style={[styles.bar, { paddingTop: insets.top + 8 }]}>
         <IconButton icon="chevron-back" label="Back" onPress={() => router.back()} />
         <Glass radius={radius.md} style={styles.inputWrap}>

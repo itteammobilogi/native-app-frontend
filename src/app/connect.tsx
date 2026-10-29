@@ -1,10 +1,10 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { Image } from 'expo-image';
 import { Linking, Pressable, ScrollView, StyleSheet, View } from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { tap } from '@/ui/Button';
 import { Glass } from '@/ui/Glass';
+import { usePageInsets } from '@/ui/GlassTabBar';
 import { Header, Screen } from '@/ui/Screen';
 import { Text } from '@/ui/Text';
 import { radius, usePalette } from '@/ui/theme';
@@ -32,9 +32,9 @@ const LINKS: { title: string; subtitle: string; href: string; icon: keyof typeof
 
 export default function ConnectScreen() {
   const t = usePalette();
-  const insets = useSafeAreaInsets();
+  const insets = usePageInsets();
   return (
-    <Screen>
+    <Screen tabBar="account">
       <Header title="Connect with us" />
       <ScrollView contentContainerStyle={{ padding: 16, gap: 12, paddingBottom: insets.bottom + 32 }}>
         <View style={{ alignItems: 'center', gap: 8, paddingVertical: 12 }}>

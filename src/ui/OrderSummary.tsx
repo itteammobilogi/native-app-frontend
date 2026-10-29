@@ -5,6 +5,7 @@ import { Pressable, StyleSheet, View } from 'react-native';
 
 import type { Cart, CartLine } from '@/core/api/cart';
 import { cartPackages, formatDeliveryDate, itemCountOf, type CartPackage } from '@/core/cartBreakup';
+import { attributeLabel } from '@/core/colourNames';
 import { formatINR } from '@/core/pricing';
 import { tap } from './Button';
 import { Glass } from './Glass';
@@ -16,7 +17,8 @@ const COLLAPSED_LINES = 3;
 // Checkout's "what you're buying": every item with quantity and line total,
 // grouped by seller package when the order ships from more than one seller,
 // each package with its own delivery/tax/charges from that seller's quote.
-export function OrderSummary({ cart }: { cart: Cart }) {
+// `onRemove` adds a delete button per line (website checkout: Trash2).
+export function OrderSummary({ cart, onRemove }: { cart: Cart; onRemove?: (line: CartLine) => void }) {
   const t = usePalette();
   const packages = cartPackages(cart);
   const multi = packages.filter((p) => p.lines.length).length > 1;
@@ -50,7 +52,7 @@ export function OrderSummary({ cart }: { cart: Cart }) {
           <View key={pkg.tid} style={{ gap: 10 }}>
             {(multi || pkg.deliveryDate) && <PackageHead pkg={pkg} index={i} multi={multi} total={packages.length} />}
             {visible.map((line) => (
-              <LineRow key={line.id} line={line} />
+              <LineRow key={line.id} line={line} onRemove={onRemove} />
             ))}
             {multi && expanded && <PackageCharges pkg={pkg} />}
           </View>
@@ -106,11 +108,11 @@ function PackageHead({ pkg, index, multi, total }: { pkg: CartPackage; index: nu
   );
 }
 
-function LineRow({ line }: { line: CartLine }) {
+function LineRow({ line, onRemove }: { line: CartLine; onRemove?: (line: CartLine) => void }) {
   const t = usePalette();
   const unit = Number(line.unit_price || 0);
   const total = unit * Number(line.quantity || 0);
-  const variant = line.variant_attributes?.map((a) => a.value).filter(Boolean).join(' · ');
+  const variant = attributeLabel(line.variant_attributes);
   return (
     <View style={styles.line}>
       <View style={styles.thumb}>
@@ -139,6 +141,16 @@ function LineRow({ line }: { line: CartLine }) {
         </Text>
       </View>
       <Text variant="label">{formatINR(total)}</Text>
+      {onRemove && (
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={`Remove ${line.title}`}
+          hitSlop={8}
+          onPress={() => (tap(), onRemove(line))}
+          style={[styles.remove, { backgroundColor: `${t.danger}14` }]}>
+          <Ionicons name="trash-outline" size={16} color={t.danger} />
+        </Pressable>
+      )}
     </View>
   );
 }
@@ -186,6 +198,7 @@ const styles = StyleSheet.create({
   line: { flexDirection: 'row', alignItems: 'center', gap: 12 },
   thumb: { width: 56, height: 56, borderRadius: 12, backgroundColor: '#FFFFFF', alignItems: 'center', justifyContent: 'center' },
   qty: { position: 'absolute', top: -6, right: -6, minWidth: 20, height: 20, borderRadius: 10, paddingHorizontal: 5, alignItems: 'center', justifyContent: 'center' },
+  remove: { width: 32, height: 32, borderRadius: 16, alignItems: 'center', justifyContent: 'center' },
   charges: { borderRadius: 12, padding: 12, gap: 6 },
   more: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, paddingTop: 12, borderTopWidth: StyleSheet.hairlineWidth },
   note: { flexDirection: 'row', alignItems: 'center', gap: 8, padding: 10, borderRadius: 12 },

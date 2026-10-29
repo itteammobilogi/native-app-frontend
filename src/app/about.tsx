@@ -3,11 +3,11 @@ import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
 import { router } from 'expo-router';
 import { ScrollView, StyleSheet, View } from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { WEBSITE_URL } from '@/core/config';
 import { Button } from '@/ui/Button';
 import { Glass } from '@/ui/Glass';
+import { usePageInsets } from '@/ui/GlassTabBar';
 import { Header, Screen } from '@/ui/Screen';
 import { Text } from '@/ui/Text';
 import { radius, usePalette } from '@/ui/theme';
@@ -62,10 +62,10 @@ const ONDC_POINTS = [
 
 export default function AboutScreen() {
   const t = usePalette();
-  const insets = useSafeAreaInsets();
+  const insets = usePageInsets();
 
   return (
-    <Screen>
+    <Screen tabBar="account">
       <Header title="About ZillyBuy" />
       <ScrollView contentContainerStyle={{ padding: 16, gap: 18, paddingBottom: insets.bottom + 32 }}>
         <LinearGradient colors={t.primaryGradient} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.hero}>

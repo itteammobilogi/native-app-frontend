@@ -1,13 +1,13 @@
 import { router, useLocalSearchParams } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { KeyboardAvoidingView, Platform, ScrollView, Switch, View } from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { createAddress, getAddress, lookupPincode, updateAddress, type AddressInput } from '@/core/api/address';
 import { errorMessage } from '@/core/api/client';
 import { useAuth } from '@/core/auth/AuthContext';
 import { Button } from '@/ui/Button';
 import { Glass } from '@/ui/Glass';
+import { usePageInsets } from '@/ui/GlassTabBar';
 import { Input } from '@/ui/Input';
 import { Header, Screen } from '@/ui/Screen';
 import { Text } from '@/ui/Text';
@@ -52,7 +52,7 @@ function validate(f: Form) {
 
 export default function AddressFormScreen() {
   const t = usePalette();
-  const insets = useSafeAreaInsets();
+  const insets = usePageInsets();
   const toast = useToast();
   const { user } = useAuth();
   const { id } = useLocalSearchParams<{ id?: string }>();
@@ -127,7 +127,7 @@ export default function AddressFormScreen() {
   };
 
   return (
-    <Screen>
+    <Screen tabBar="account">
       <Header title={editing ? 'Edit address' : 'Add address'} />
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ flex: 1 }}>
         <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={{ padding: 16, gap: 14, paddingBottom: insets.bottom + 32 }}>

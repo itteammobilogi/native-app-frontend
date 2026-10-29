@@ -3,7 +3,6 @@ import { Image } from 'expo-image';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useMemo, useState } from 'react';
 import { Pressable, ScrollView, Share, StyleSheet, useWindowDimensions, View } from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { comboPricing, getCombo, type ComboItem } from '@/core/api/combos';
 import { useCart } from '@/core/cart/CartContext';
@@ -13,6 +12,7 @@ import { useLocation } from '@/core/location/LocationContext';
 import { formatINR, isProductUnavailable } from '@/core/pricing';
 import { Button, IconButton, tap } from '@/ui/Button';
 import { Glass } from '@/ui/Glass';
+import { usePageInsets } from '@/ui/GlassTabBar';
 import { QtyStepper } from '@/ui/QtyStepper';
 import { ErrorState, Header, Screen } from '@/ui/Screen';
 import { Skeleton } from '@/ui/Skeleton';
@@ -25,7 +25,7 @@ import { useToast } from '@/ui/Toast';
 export default function ComboScreen() {
   const { slug } = useLocalSearchParams<{ slug: string }>();
   const t = usePalette();
-  const insets = useSafeAreaInsets();
+  const insets = usePageInsets();
   const { width } = useWindowDimensions();
   const toast = useToast();
   const cart = useCart();
@@ -103,7 +103,7 @@ export default function ComboScreen() {
 
   if (combo.loading) {
     return (
-      <Screen>
+      <Screen tabBar="index">
         <Header title="Combo" />
         <View style={{ padding: 16, gap: 12 }}>
           <Skeleton height={width * 0.62} r={radius.lg} />
@@ -115,7 +115,7 @@ export default function ComboScreen() {
   }
   if (combo.error || !c) {
     return (
-      <Screen>
+      <Screen tabBar="index">
         <Header title="Combo" />
         <ErrorState message={combo.error ?? 'Combo not found'} onRetry={combo.reload} />
       </Screen>
@@ -127,7 +127,7 @@ export default function ComboScreen() {
   const imgWidth = width - 32;
 
   return (
-    <Screen>
+    <Screen tabBar="index">
       <Header title={c.zc_name} right={<IconButton icon="share-social-outline" label="Share" onPress={share} />} />
       <ScrollView contentContainerStyle={{ padding: 16, gap: 14, paddingBottom: insets.bottom + 120 }}>
         {gallery.length > 0 && (
@@ -209,7 +209,7 @@ export default function ComboScreen() {
         </View>
       </ScrollView>
 
-      <Glass strong radius={0} style={[styles.bar, { paddingBottom: insets.bottom + 12 }]}>
+      <Glass strong radius={0} style={[styles.bar, { bottom: insets.bottom, paddingBottom: 12 }]}>
         <View style={{ flex: 1 }}>
           <Text variant="caption" tone="muted">
             {selected.length} selected
@@ -317,5 +317,5 @@ const styles = StyleSheet.create({
   dots: { flexDirection: 'row', justifyContent: 'center', gap: 6, marginTop: 10 },
   dot: { height: 6, borderRadius: 3 },
   thumb: { width: 72, height: 72, borderRadius: radius.md, backgroundColor: '#fff', alignItems: 'center', justifyContent: 'center', overflow: 'hidden' },
-  bar: { position: 'absolute', left: 0, right: 0, bottom: 0, flexDirection: 'row', alignItems: 'center', gap: 10, paddingHorizontal: 16, paddingTop: 12 },
+  bar: { position: 'absolute', left: 0, right: 0, flexDirection: 'row', alignItems: 'center', gap: 10, paddingHorizontal: 16, paddingTop: 12 },
 });

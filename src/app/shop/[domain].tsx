@@ -37,7 +37,7 @@ export default function ShopScreen() {
   const setCategory = (category?: string) => setFilters((f) => ({ ...f, category }));
 
   return (
-    <Screen>
+    <Screen tabBar="categories">
       <Header
         title={title}
         right={<IconButton icon="search" label="Search" onPress={() => router.push('/search')} />}

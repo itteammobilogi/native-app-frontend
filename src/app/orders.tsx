@@ -2,13 +2,13 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 import { Image } from 'expo-image';
 import { router } from 'expo-router';
 import { FlatList, Pressable, RefreshControl, StyleSheet, View } from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { listOrders } from '@/core/api/orders';
 import { useAsync } from '@/core/hooks/useAsync';
 import { formatINR } from '@/core/pricing';
 import { tap } from '@/ui/Button';
 import { Glass } from '@/ui/Glass';
+import { usePageInsets } from '@/ui/GlassTabBar';
 import { OrderStatus } from '@/ui/OrderStatus';
 import { EmptyState, ErrorState, Header, Screen } from '@/ui/Screen';
 import { Skeleton } from '@/ui/Skeleton';
@@ -17,11 +17,11 @@ import { radius, usePalette } from '@/ui/theme';
 
 export default function OrdersScreen() {
   const t = usePalette();
-  const insets = useSafeAreaInsets();
+  const insets = usePageInsets();
   const orders = useAsync(listOrders, []);
 
   return (
-    <Screen>
+    <Screen tabBar="account">
       <Header title="My orders" />
       {orders.loading ? (
         <View style={{ padding: 16, gap: 12 }}>

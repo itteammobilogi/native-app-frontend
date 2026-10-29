@@ -1,10 +1,10 @@
 import { useEffect, useState } from 'react';
 import { ActivityIndicator, FlatList, StyleSheet, View } from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { listBrands } from '@/core/api/brands';
 import { usePaged } from '@/core/hooks/useAsync';
 import { BrandTile } from '@/ui/BrandTile';
+import { usePageInsets } from '@/ui/GlassTabBar';
 import { Input } from '@/ui/Input';
 import { EmptyState, ErrorState, Header, Screen } from '@/ui/Screen';
 import { Skeleton } from '@/ui/Skeleton';
@@ -15,7 +15,7 @@ import { radius, usePalette } from '@/ui/theme';
 // page by page as you scroll; typing searches by name.
 export default function BrandsScreen() {
   const t = usePalette();
-  const insets = useSafeAreaInsets();
+  const insets = usePageInsets();
   const [query, setQuery] = useState('');
   const [q, setQ] = useState('');
 
@@ -32,7 +32,7 @@ export default function BrandsScreen() {
   }, [q]);
 
   return (
-    <Screen>
+    <Screen tabBar="categories">
       <Header title="Brands" />
       <FlatList
         data={list.items}

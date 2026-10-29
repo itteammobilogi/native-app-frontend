@@ -2,7 +2,7 @@
   "expo": {
     "name": "ZillyBuy",
     "slug": "zillybuy-app",
-    "version": "1.0.0",
+    "version": "4.0.1",
     "orientation": "portrait",
     "icon": "./assets/brand/icon.png",
     "scheme": "zillybuy",
@@ -24,7 +24,8 @@
       }
     },
     "android": {
-      "package": "com.zillybuy.app",
+      "package": "com.zillybuy",
+      "googleServicesFile": "./google-services.json",
       "adaptiveIcon": {
         "backgroundColor": "#FFFFFF",
         "foregroundImage": "./assets/brand/adaptive-foreground.png",
@@ -41,11 +42,11 @@
       [
         "expo-splash-screen",
         {
-          "backgroundColor": "#060A1C",
+          "backgroundColor": "#FFFFFF",
           "image": "./assets/brand/splash-blank.png",
           "imageWidth": 1,
           "dark": {
-            "backgroundColor": "#060A1C",
+            "backgroundColor": "#FFFFFF",
             "image": "./assets/brand/splash-blank.png"
           }
         }
@@ -58,19 +59,33 @@
       [
         "expo-image-picker",
         {
-          "photosPermission": "ZillyBuy needs access to your photos so you can add them to product reviews.",
-          "cameraPermission": false,
+          "photosPermission": "ZillyBuy needs access to your photos so you can add them to product reviews or search with a picture.",
+          "cameraPermission": "ZillyBuy uses the camera so you can photograph a product and ask ZillyAI to find it.",
           "microphonePermission": false
         }
       ],
       [
         "expo-notifications",
         {
+          "icon": "./assets/brand/notification-icon.png",
           "color": "#0066CC",
           "defaultChannel": "default"
         }
       ],
-      "expo-sharing"
+      "expo-sharing",
+      [
+        "expo-audio",
+        {
+          "microphonePermission": "ZillyBuy uses the microphone so you can ask ZillyAI questions by voice."
+        }
+      ],
+      "expo-asset",
+      [
+        "expo-navigation-bar",
+        {
+          "enforceContrast": false
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true,

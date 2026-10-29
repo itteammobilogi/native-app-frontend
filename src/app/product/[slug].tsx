@@ -1,7 +1,7 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { Image } from 'expo-image';
 import { router, useLocalSearchParams } from 'expo-router';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { FlatList, Pressable, ScrollView, Share, StyleSheet, useWindowDimensions, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -10,17 +10,20 @@ import {
   listProducts,
   plainText,
   productGallery,
-  type ProductDetail,
+  variantUnavailable,
+  type ProductSummary,
   type Variant,
 } from '@/core/api/catalog';
 import { getProductReviews } from '@/core/api/reviews';
 import { useCart } from '@/core/cart/CartContext';
+import { attributeLabel, colourNameMap, swatchHex } from '@/core/colourNames';
 import { WEBSITE_URL } from '@/core/config';
 import { useAsync } from '@/core/hooks/useAsync';
 import { useLocation } from '@/core/location/LocationContext';
-import { isProductUnavailable } from '@/core/pricing';
+import { useSaved } from '@/core/saved/SavedContext';
 import { Button, IconButton, tap } from '@/ui/Button';
 import { Glass } from '@/ui/Glass';
+import { usePageInsets } from '@/ui/GlassTabBar';
 import { Price } from '@/ui/Price';
 import { ProductCard } from '@/ui/ProductCard';
 import { QtyStepper } from '@/ui/QtyStepper';
@@ -31,18 +34,13 @@ import { Text } from '@/ui/Text';
 import { radius, usePalette } from '@/ui/theme';
 import { useToast } from '@/ui/Toast';
 
-const variantLabel = (v: Variant) =>
-  v.variant_attributes?.length ? v.variant_attributes.map((a) => a.value).join(' · ') : v.name;
-
-const variantUnavailable = (p: ProductDetail, v?: Variant | null) =>
-  !v ||
-  isProductUnavailable({ bpp_status: p.bpp_status, provider_is_disabled: p.provider_is_disabled, quantity: v.quantity }) ||
-  !(Number(v.price) > 0);
+// "Blue · M": colour swatches arrive as hex, shown by name (see colourNames).
+const variantLabel = (v: Variant, names: Map<string, string>) => attributeLabel(v.variant_attributes, names) || v.name;
 
 export default function ProductScreen() {
   const { slug } = useLocalSearchParams<{ slug: string }>();
   const t = usePalette();
-  const insets = useSafeAreaInsets();
+  const insets = usePageInsets();
   const { width } = useWindowDimensions();
   const toast = useToast();
   const cart = useCart();
@@ -80,9 +78,36 @@ export default function ProductScreen() {
   }, [p, variantId]);
 
   const gallery = useMemo(() => (p ? productGallery(p, variant) : []), [p, variant]);
+  const colourNames = useMemo(() => colourNameMap(p?.variants), [p?.variants]);
   const maxQty = Math.max(1, variant?.qty_limit?.max ?? variant?.max_qty_per_order ?? 10);
   const unavailable = p ? variantUnavailable(p, variant) : true;
   const description = plainText(p?.long_desc) || plainText(p?.short_desc);
+
+  // Card-sized view of this product, for the wishlist and recently viewed.
+  const summary = useMemo<ProductSummary | null>(
+    () =>
+      p
+        ? {
+            id: p.id,
+            slug,
+            name: p.name,
+            image: gallery[0] ?? null,
+            price: variant?.price ?? null,
+            max_value: variant?.max_value ?? p.max_value ?? null,
+            brand_name: p.brand_name ?? null,
+            is_assured: p.is_assured,
+            is_unavailable: unavailable ? 1 : 0,
+          }
+        : null,
+    [p, slug, gallery, variant, unavailable],
+  );
+
+  const { addRecent } = useSaved();
+  useEffect(() => {
+    if (summary) addRecent(summary);
+    // Record once per product load, not on every variant switch.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [p?.id, addRecent]);
 
   const addToCart = async (mode: 'cart' | 'buy') => {
     if (!p || !variant) return;
@@ -112,7 +137,7 @@ export default function ProductScreen() {
 
   if (product.error) {
     return (
-      <Screen>
+      <Screen tabBar="index">
         <TopButtons />
         <ErrorState message={product.error} onRetry={product.reload} />
       </Screen>
@@ -122,7 +147,7 @@ export default function ProductScreen() {
   const imgW = width - 32;
 
   return (
-    <Screen>
+    <Screen tabBar="index">
       <ScrollView contentContainerStyle={{ paddingBottom: insets.bottom + 120 }} showsVerticalScrollIndicator={false}>
         {/* Gallery */}
         <View style={{ paddingTop: insets.top + 60, paddingHorizontal: 16 }}>
@@ -218,6 +243,7 @@ export default function ProductScreen() {
                     {p.variants.map((v) => {
                       const active = v.id === variant?.id;
                       const off = variantUnavailable(p, v);
+                      const swatch = swatchHex(v.variant_attributes);
                       return (
                         <Pressable
                           key={v.id}
@@ -235,8 +261,9 @@ export default function ProductScreen() {
                               opacity: off ? 0.5 : 1,
                             },
                           ]}>
+                          {swatch && <View style={[styles.swatch, { backgroundColor: swatch, borderColor: t.hairline }]} />}
                           <Text variant="label" style={{ fontSize: 13, color: active ? t.primary : t.text }}>
-                            {variantLabel(v)}
+                            {variantLabel(v, colourNames)}
                           </Text>
                         </Pressable>
                       );
@@ -334,12 +361,13 @@ export default function ProductScreen() {
       </ScrollView>
 
       <TopButtons
+        product={summary}
         onShare={() => Share.share({ message: `${p?.name ?? 'Check this out'} — ${WEBSITE_URL}/product/${slug}` })}
       />
 
-      {/* Sticky action bar */}
+      {/* Sticky action bar, just above the tab bar */}
       {p && (
-        <Glass strong radius={radius.xl} intensity={70} style={[styles.actionBar, { bottom: Math.max(insets.bottom, 12) }]}>
+        <Glass strong radius={radius.xl} intensity={70} style={[styles.actionBar, { bottom: insets.bottom + 8 }]}>
           <Button
             title="Add to cart"
             icon="bag-add-outline"
@@ -365,13 +393,28 @@ export default function ProductScreen() {
 
 const truthy = (v: unknown) => v === true || Number(v) === 1;
 
-function TopButtons({ onShare }: { onShare?: () => void }) {
+function TopButtons({ onShare, product }: { onShare?: () => void; product?: ProductSummary | null }) {
+  const t = usePalette();
   const insets = useSafeAreaInsets();
+  const toast = useToast();
   const { count } = useCart();
+  const { isSaved, toggleSaved } = useSaved();
+  const saved = product ? isSaved(product.id) : false;
   return (
     <View style={[styles.top, { top: insets.top + 8 }]} pointerEvents="box-none">
       <IconButton icon="chevron-back" label="Back" onPress={() => (router.canGoBack() ? router.back() : router.replace('/'))} />
       <View style={{ flexDirection: 'row', gap: 10 }}>
+        {product && (
+          <IconButton
+            icon={saved ? 'heart' : 'heart-outline'}
+            color={saved ? t.danger : undefined}
+            label={saved ? 'Remove from wishlist' : 'Save to wishlist'}
+            onPress={() => {
+              const nowSaved = toggleSaved(product);
+              toast(nowSaved ? 'Saved to your wishlist' : 'Removed from wishlist', nowSaved ? 'success' : 'info');
+            }}
+          />
+        )}
         {onShare && <IconButton icon="share-outline" label="Share" onPress={onShare} />}
         <IconButton icon="bag-handle-outline" label="Cart" badge={count} onPress={() => router.push('/cart')} />
       </View>
@@ -400,7 +443,8 @@ const styles = StyleSheet.create({
   rating: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   ratingPill: { flexDirection: 'row', alignItems: 'center', gap: 3, paddingHorizontal: 7, paddingVertical: 3, borderRadius: 6 },
   notice: { flexDirection: 'row', alignItems: 'center', gap: 8, padding: 10, borderRadius: radius.sm },
-  variant: { paddingHorizontal: 14, paddingVertical: 10, borderRadius: radius.md, borderWidth: 1.5 },
+  variant: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 14, paddingVertical: 10, borderRadius: radius.md, borderWidth: 1.5 },
+  swatch: { width: 16, height: 16, borderRadius: 8, borderWidth: 1 },
   between: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   policies: { flexDirection: 'row', gap: 8 },
   policyIcon: { width: 38, height: 38, borderRadius: 19, alignItems: 'center', justifyContent: 'center' },

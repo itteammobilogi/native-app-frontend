@@ -1,12 +1,12 @@
 import { Image } from 'expo-image';
 import { useLocalSearchParams } from 'expo-router';
 import { FlatList, StyleSheet, View } from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { authorPhoto, getAuthorPosts } from '@/core/api/blogs';
 import { useAsync } from '@/core/hooks/useAsync';
 import { BlogCard } from '@/ui/BlogCard';
 import { Glass } from '@/ui/Glass';
+import { usePageInsets } from '@/ui/GlassTabBar';
 import { EmptyState, ErrorState, Header, Screen } from '@/ui/Screen';
 import { Skeleton } from '@/ui/Skeleton';
 import { Text } from '@/ui/Text';
@@ -17,13 +17,13 @@ import { radius, usePalette } from '@/ui/theme';
 export default function BlogAuthorScreen() {
   const { slug } = useLocalSearchParams<{ slug: string }>();
   const t = usePalette();
-  const insets = useSafeAreaInsets();
+  const insets = usePageInsets();
   const posts = useAsync(() => getAuthorPosts(slug), [slug]);
   const a = posts.data?.[0];
   const photo = authorPhoto(a?.author_profile_photo);
 
   return (
-    <Screen>
+    <Screen tabBar="index">
       <Header title={a?.author_name ?? 'Author'} />
       {posts.loading ? (
         <View style={{ padding: 16, gap: 12 }}>

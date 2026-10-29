@@ -8,6 +8,7 @@ import { isProductUnavailable } from '@/core/pricing';
 import { tap } from './Button';
 import { Glass } from './Glass';
 import { Price } from './Price';
+import { SaveButton } from './SaveButton';
 import { Text } from './Text';
 import { radius, usePalette } from './theme';
 
@@ -45,6 +46,9 @@ export function ProductCard({ product, width }: { product: ProductSummary; width
               </Text>
             </View>
           )}
+          <View style={styles.save}>
+            <SaveButton product={product} />
+          </View>
           {!unavailable && Number(product.is_assured) === 1 && (
             <View style={[styles.badge, { backgroundColor: t.primary }]}>
               <Ionicons name="shield-checkmark" size={10} color="#fff" />
@@ -91,5 +95,6 @@ const styles = StyleSheet.create({
     paddingVertical: 3,
     borderRadius: radius.pill,
   },
+  save: { position: 'absolute', top: 6, right: 6 },
   body: { paddingHorizontal: 4, paddingTop: 8, paddingBottom: 4, gap: 4 },
 });

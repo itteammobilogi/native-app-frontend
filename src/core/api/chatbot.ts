@@ -2,6 +2,9 @@ import { isAxiosError } from 'axios';
 import * as SecureStore from 'expo-secure-store';
 import { Platform } from 'react-native';
 
+import { getGuestId, getToken } from '@/core/auth/storage';
+import { APP_SOURCE, WEBSITE_URL } from '@/core/config';
+import type { ProductSummary } from './catalog';
 import { api } from './client';
 
 // ZillyAI on the same backend as the website widget (/api/chatbot/*). The
@@ -74,6 +77,119 @@ export async function askAssistant(p: {
 }): Promise<string> {
   const data = await post('/api/chatbot/chat', { ...p, internal: true });
   return String(data?.data?.assistant_message?.message ?? '');
+}
+
+/* ------------------------- Website AI routes (Next.js) ------------------------ */
+
+// The website's ZillyAI replies, voice transcription and image analysis run as
+// Next.js API routes on zillybuy.com (not the Node backend), so they're called
+// on WEBSITE_URL with the same Bearer token and guest id the widget sends.
+
+export type AiLanguage = 'english' | 'hinglish' | 'hindi';
+
+export type AiOrderCard = {
+  orderId: string;
+  placedOn: string | null;
+  step: number; // 0 Ordered, 1 Packed, 2 Shipped, 3 Delivered, -1 cancelled/returned
+  statusLabel: string;
+  expectedDeliveryDate: string | null;
+  total: number;
+  items: { title: string; quantity: number; image: string | null }[];
+};
+
+export type AiTicketOffer = { orderId: number | string; orderLabel: string; subject: string; description: string };
+
+export type AiReply = {
+  type: 'products' | 'order' | 'handoff' | 'text';
+  kind: string;
+  reply: string;
+  language?: AiLanguage;
+  products: ProductSummary[];
+  productQuery: string | null;
+  filters: { label: string; selected: boolean }[];
+  order: AiOrderCard | null;
+  buttons: string[];
+  suggestions: string[];
+  ticket: AiTicketOffer | null;
+};
+
+// Server budget is 15s; a little more for the network, like the widget's 17s.
+const REPLY_TIMEOUT_MS = 17000;
+
+async function postWebsite(path: string, body: object, { signal, timeoutMs = 20000 }: { signal?: AbortSignal; timeoutMs?: number } = {}) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  const onAbort = () => controller.abort();
+  signal?.addEventListener('abort', onAbort);
+  try {
+    const [token, guestId] = await Promise.all([getToken(), getGuestId()]);
+    const res = await fetch(`${WEBSITE_URL}${path}`, {
+      method: 'POST',
+      headers: {
+        Accept: 'application/json',
+        'Content-Type': 'application/json',
+        'x-utm-source': APP_SOURCE,
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+      body: JSON.stringify({ guestId: guestId || undefined, ...body }),
+      signal: controller.signal,
+    });
+    return await res.json().catch(() => ({}));
+  } finally {
+    clearTimeout(timer);
+    signal?.removeEventListener('abort', onAbort);
+  }
+}
+
+// The AI's answer, or null on failure/timeout so the caller can fall back to
+// the on-device replies. Aborting `signal` (Stop) rejects with AbortError.
+export async function requestAiReply(
+  message: string,
+  history: ChatTurn[],
+  { language, signal }: { language?: AiLanguage; signal?: AbortSignal } = {},
+): Promise<AiReply | null> {
+  try {
+    const data = await postWebsite(
+      '/api/ai/chat/reply',
+      { message, history, ...(language ? { language } : {}) },
+      { signal, timeoutMs: REPLY_TIMEOUT_MS },
+    );
+    return data?.success && data?.reply ? (data as AiReply) : null;
+  } catch (e) {
+    if (signal?.aborted) throw e;
+    return null;
+  }
+}
+
+export async function transcribeAudio(audioBase64: string, mimeType: string): Promise<string> {
+  const data = await postWebsite('/api/ai/transcribe', { audioBase64, mimeType }, { timeoutMs: 30000 });
+  if (!data?.success) throw new Error(data?.error || 'Transcription failed');
+  return String(data.text || '').trim();
+}
+
+export type ImageAnalysis = {
+  searchQuery?: string;
+  exactModel?: string;
+  keywords?: string;
+  category?: string;
+  color?: string;
+  brand?: string;
+  description?: string;
+};
+
+export async function analyzeImage(imageBase64: string, mimeType: string): Promise<ImageAnalysis> {
+  const data = await postWebsite('/api/ai/vision', { imageBase64, mimeType }, { timeoutMs: 25000 });
+  if (!data?.success) throw new Error(data?.error || 'Image analysis failed');
+  return data as ImageAnalysis;
+}
+
+// 👍/👎 on a reply (same payload as the widget). Fire-and-forget.
+export function sendReplyFeedback(p: { messageId: string; rating: 'up' | 'down'; query: string; reply: string }) {
+  Promise.all([ensureSession().catch(() => null), getGuestId()])
+    .then(([sid, guestId]) =>
+      api.post('/api/ai/chat/feedback', { sessionId: sid, guestId, type: 'reply_rating', ...p, reply: p.reply.slice(0, 1000) }),
+    )
+    .catch(() => {});
 }
 
 // Records a visible turn for the admin transcript. Fire-and-forget.

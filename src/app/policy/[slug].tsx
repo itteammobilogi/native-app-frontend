@@ -1,11 +1,11 @@
 import { router, useLocalSearchParams } from 'expo-router';
 import { RefreshControl, ScrollView, StyleSheet, View } from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { getPolicy, POLICIES, type PolicyBlock, type PolicySlug } from '@/core/api/support';
 import { useAsync } from '@/core/hooks/useAsync';
 import { Button } from '@/ui/Button';
 import { Glass } from '@/ui/Glass';
+import { usePageInsets } from '@/ui/GlassTabBar';
 import { EmptyState, ErrorState, Header, Screen } from '@/ui/Screen';
 import { Skeleton } from '@/ui/Skeleton';
 import { Text } from '@/ui/Text';
@@ -15,7 +15,7 @@ import { radius, usePalette } from '@/ui/theme';
 // website's page text so the two never drift apart.
 export default function PolicyScreen() {
   const { slug } = useLocalSearchParams<{ slug: string }>();
-  const insets = useSafeAreaInsets();
+  const insets = usePageInsets();
   const t = usePalette();
   const known = slug in POLICIES;
   const title = known ? POLICIES[slug as PolicySlug] : 'Policy';
@@ -23,7 +23,7 @@ export default function PolicyScreen() {
 
   if (!known) {
     return (
-      <Screen>
+      <Screen tabBar="account">
         <Header title={title} />
         <EmptyState icon="document-text-outline" title="Page not found" action="Go to Help & support" onAction={() => router.replace('/support')} />
       </Screen>
@@ -36,7 +36,7 @@ export default function PolicyScreen() {
   const updated = blocks[0]?.type === 'p' && /^last updated/i.test(blocks[0].text) ? blocks.shift()!.text : null;
 
   return (
-    <Screen>
+    <Screen tabBar="account">
       <Header title={title} />
       {doc.error && !doc.data ? (
         <ErrorState message={doc.error} onRetry={doc.reload} />

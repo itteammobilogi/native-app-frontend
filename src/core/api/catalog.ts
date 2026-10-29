@@ -1,6 +1,7 @@
 import { create } from 'axios';
 
 import { ADMIN_API_URL, WEBSITE_URL } from '@/core/config';
+import { isProductUnavailable } from '@/core/pricing';
 import { api } from './client';
 
 // Listing row from /api/products/list-products (prices are decimal strings).
@@ -241,6 +242,13 @@ export function productGallery(p: ProductDetail, variant?: Variant | null) {
   const urls = [...parseMedia(variant?.image), ...parseMedia(p.carousel_images), ...parseMedia(p.images), ...parseMedia(p.image)];
   return [...new Set(urls)];
 }
+
+// A variant can't be bought when the seller is off, it's out of stock, or it
+// has no price.
+export const variantUnavailable = (p: ProductDetail, v?: Variant | null) =>
+  !v ||
+  isProductUnavailable({ bpp_status: p.bpp_status, provider_is_disabled: p.provider_is_disabled, quantity: v.quantity }) ||
+  !(Number(v.price) > 0);
 
 // long_desc may be plain text, HTML or a JSON {"blocks":[{text}]} string.
 export function plainText(v?: string | null) {
