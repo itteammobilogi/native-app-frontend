@@ -9,6 +9,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { DOMAIN_META } from '@/core/api/catalog';
 import type { Order } from '@/core/api/orders';
+import type { PickedImage } from '@/core/api/reviews';
 import { STARTERS, type Action } from '@/core/assistant/brain';
 import { useAssistant, type ChatMessage, type PickedPhoto } from '@/core/assistant/useAssistant';
 import { useSpeaker, useVoiceInput, voiceSupported } from '@/core/assistant/useVoice';
@@ -19,6 +20,7 @@ import { AiOrb, TypingDots } from '@/ui/assistant/AiOrb';
 import { AiOrderCardView, FilterChips, LanguageTag, MessageActions, QuickReplies } from '@/ui/assistant/ChatParts';
 import { Composer } from '@/ui/assistant/Composer';
 import { countWords, firstWords, Markdown } from '@/ui/assistant/Markdown';
+import { TicketOfferCard } from '@/ui/assistant/TicketCard';
 import { Glass } from '@/ui/Glass';
 import { OrderStatus } from '@/ui/OrderStatus';
 import { ProductCard } from '@/ui/ProductCard';
@@ -45,7 +47,7 @@ export default function AssistantScreen() {
   const { user, isLoggedIn } = useAuth();
   const speaker = useSpeaker();
   const [readAloud, setReadAloud] = useState(readAloudPref);
-  const { messages, busy, status, send, stop, regenerate, rate, raiseTicket, settle, clear } = useAssistant({
+  const { messages, busy, status, send, stop, regenerate, rate, settle, clear, ticketOfferId, ticketPhotos, setTicketPhotos } = useAssistant({
     onVoiceReply: (m) => speaker.speak(m.id, m.text, m.language),
   });
   const [draft, setDraft] = useState('');
@@ -79,7 +81,6 @@ export default function AssistantScreen() {
     tap();
     if (a.kind === 'send') submit(a.value);
     else if (a.kind === 'go') router.push(a.href);
-    else if (a.kind === 'ticket') raiseTicket();
     else Linking.openURL(a.url).catch(() => {});
   };
 
@@ -161,6 +162,11 @@ export default function AssistantScreen() {
                 onTranslate={() => regenerate(item.id, 'english')}
                 onRate={(r) => rate(item.id, r)}
                 onSettled={() => settle(item.id)}
+                ticket={
+                  item.id === ticketOfferId && item.ticket
+                    ? { photos: ticketPhotos, onPhotos: setTicketPhotos }
+                    : undefined
+                }
               />
             )
           }
@@ -284,6 +290,13 @@ function UserBubble({ message }: { message: ChatMessage }) {
       {!!message.imageUri && (
         <Image source={{ uri: message.imageUri }} style={[styles.userPhoto, { borderColor: t.glassBorder }]} contentFit="cover" />
       )}
+      {!!message.photos?.length && (
+        <View style={{ flexDirection: 'row', gap: 6 }}>
+          {message.photos.map((uri) => (
+            <Image key={uri} source={{ uri }} style={[styles.ticketPhoto, { borderColor: t.glassBorder }]} contentFit="cover" />
+          ))}
+        </View>
+      )}
       <LinearGradient colors={t.primaryGradient} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.userBubble}>
         <Text tone="onPrimary" style={{ fontSize: 15, lineHeight: 21 }}>
           {message.text}
@@ -337,6 +350,8 @@ type BotTurnProps = {
   onTranslate: () => void;
   onRate: (r: 'up' | 'down') => void;
   onSettled: () => void;
+  // Set on the turn whose ticket offer is still open.
+  ticket?: { photos: PickedImage[]; onPhotos: (next: PickedImage[]) => void };
 };
 
 function BotTurn(p: BotTurnProps) {
@@ -442,19 +457,26 @@ function BotTurn(p: BotTurnProps) {
 
           {m.orders?.map((o) => <OrderChip key={o.id} order={o} />)}
 
+          {!!p.ticket && !!m.ticket && (
+            <View style={{ paddingLeft: 38 }}>
+              <TicketOfferCard
+                offer={m.ticket}
+                language={m.language}
+                photos={p.ticket.photos}
+                onPhotos={p.ticket.onPhotos}
+                onSend={p.onSend}
+                disabled={p.busy}
+              />
+            </View>
+          )}
+
           {!!m.actions?.length && (
             <View style={[styles.actions, { opacity: p.latest ? 1 : 0.7 }]}>
               {m.actions.map((a) => (
                 <Pressable key={`${a.kind}-${a.label}`} onPress={() => p.onAction(a)} disabled={p.busy && a.kind !== 'go'} accessibilityRole="button">
-                  <View
-                    style={[
-                      styles.action,
-                      a.kind === 'ticket'
-                        ? { borderColor: t.warning, backgroundColor: `${t.warning}1A` }
-                        : { borderColor: `${t.primary}55`, backgroundColor: `${t.primary}10` },
-                    ]}>
-                    {!!a.icon && <Ionicons name={a.icon as any} size={14} color={a.kind === 'ticket' ? t.warning : t.primary} />}
-                    <Text variant="caption" style={{ fontWeight: '700', color: a.kind === 'ticket' ? t.warning : t.primary }}>
+                  <View style={[styles.action, { borderColor: `${t.primary}55`, backgroundColor: `${t.primary}10` }]}>
+                    {!!a.icon && <Ionicons name={a.icon as any} size={14} color={t.primary} />}
+                    <Text variant="caption" style={{ fontWeight: '700', color: t.primary }}>
                       {a.label}
                     </Text>
                     {a.kind === 'go' && <Ionicons name="chevron-forward" size={12} color={t.primary} />}
@@ -544,6 +566,7 @@ const styles = StyleSheet.create({
   botBubble: { flexShrink: 1, paddingHorizontal: 14, paddingVertical: 11, borderBottomLeftRadius: 6 },
   userBubble: { maxWidth: '82%', paddingHorizontal: 14, paddingVertical: 11, borderRadius: 20, borderBottomRightRadius: 6 },
   userPhoto: { width: 150, height: 150, borderRadius: 18, borderWidth: 1 },
+  ticketPhoto: { width: 64, height: 64, borderRadius: 12, borderWidth: 1 },
   retry: { flexDirection: 'row', alignItems: 'center', gap: 6, alignSelf: 'flex-start', height: 34, paddingHorizontal: 14, borderRadius: 10 },
   note: { flexDirection: 'row', alignItems: 'center', gap: 5 },
   seeAll: { width: 120, flex: 1, alignItems: 'center', justifyContent: 'center', gap: 10, padding: 12 },

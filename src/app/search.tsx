@@ -3,7 +3,7 @@ import { Image } from 'expo-image';
 import { router, useLocalSearchParams } from 'expo-router';
 import * as SecureStore from 'expo-secure-store';
 import { useEffect, useRef, useState } from 'react';
-import { Platform, Pressable, ScrollView, StyleSheet, TextInput, View } from 'react-native';
+import { Platform, Pressable, ScrollView, StyleSheet, TextInput, useWindowDimensions, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { search, type SearchResult } from '@/core/api/catalog';
@@ -11,8 +11,10 @@ import { usePaged } from '@/core/hooks/useAsync';
 import { IconButton, tap } from '@/ui/Button';
 import { Chip } from '@/ui/Chip';
 import { Glass } from '@/ui/Glass';
+import { tabBarSpace } from '@/ui/GlassTabBar';
 import { ProductGrid } from '@/ui/ProductGrid';
 import { Screen } from '@/ui/Screen';
+import { useKeyboardHeight } from '@/ui/Sheet';
 import { Text } from '@/ui/Text';
 import { radius, usePalette } from '@/ui/theme';
 
@@ -30,6 +32,8 @@ export default function SearchScreen() {
   const [suggestion, setSuggestion] = useState<{ q: string; result: SearchResult } | null>(null);
   const [recent, setRecent] = useState<string[]>([]);
   const abort = useRef<AbortController | null>(null);
+  const keyboard = useKeyboardHeight();
+  const { height: windowHeight } = useWindowDimensions();
 
   useEffect(() => {
     if (!canStore) return;
@@ -108,8 +112,16 @@ export default function SearchScreen() {
       </View>
 
       {suggest ? (
-        <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={{ padding: 16, gap: 8 }}>
-          <Glass radius={radius.lg} style={{ paddingVertical: 6 }}>
+        // A dropdown at most half the screen tall that scrolls inside, and
+        // never runs behind the keyboard or the tab bar. (These insets are
+        // read outside Screen, so the bar's space is added here.)
+        <View style={{ flex: 1, padding: 16, paddingBottom: (keyboard || insets.bottom + tabBarSpace(insets.bottom)) + 12 }}>
+          <Glass radius={radius.lg} style={[styles.suggestBox, { maxHeight: windowHeight * 0.5 }]}>
+            <ScrollView
+              keyboardShouldPersistTaps="handled"
+              keyboardDismissMode="on-drag"
+              style={{ flexGrow: 0 }}
+              contentContainerStyle={{ paddingVertical: 6 }}>
             {suggest.categories.map((c) => (
               <SuggestRow
                 key={`c${c.id}`}
@@ -132,9 +144,12 @@ export default function SearchScreen() {
                 onPress={() => router.push({ pathname: '/product/[slug]', params: { slug: p.slug } })}
               />
             ))}
-            <SuggestRow icon="search" label={`See all results for "${text.trim()}"`} onPress={() => submit(text)} />
+            </ScrollView>
+            <View style={[styles.seeAll, { borderTopColor: t.hairline }]}>
+              <SuggestRow icon="search" label={`See all results for "${text.trim()}"`} onPress={() => submit(text)} />
+            </View>
           </Glass>
-        </ScrollView>
+        </View>
       ) : submitted ? (
         <ProductGrid
           {...results}
@@ -218,6 +233,8 @@ const styles = StyleSheet.create({
   bar: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingHorizontal: 16, paddingBottom: 10 },
   inputWrap: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 8, height: 48, paddingHorizontal: 14 },
   input: { flex: 1, fontSize: 16, height: '100%' },
+  suggestBox: { flexShrink: 1 },
+  seeAll: { borderTopWidth: StyleSheet.hairlineWidth, paddingVertical: 4 },
   suggest: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 10, paddingHorizontal: 10 },
   thumb: { width: 40, height: 40, borderRadius: 10, backgroundColor: '#fff', alignItems: 'center', justifyContent: 'center' },
   row: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },

@@ -97,7 +97,16 @@ export type AiOrderCard = {
   items: { title: string; quantity: number; image: string | null }[];
 };
 
-export type AiTicketOffer = { orderId: number | string; orderLabel: string; subject: string; description: string };
+// needsPhoto: the problem is with a delivered item, so the ticket card asks
+// for 1-3 photos (or "No photo").
+export type AiTicketOffer = {
+  orderId: number | string;
+  orderLabel: string;
+  itemTitle?: string | null;
+  needsPhoto?: boolean;
+  subject: string;
+  description: string;
+};
 
 export type AiReply = {
   type: 'products' | 'order' | 'handoff' | 'text';

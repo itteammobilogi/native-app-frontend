@@ -21,9 +21,7 @@ import { SUPPORT } from '@/core/api/support';
 export type Action =
   | { kind: 'send'; label: string; value: string; icon?: string }
   | { kind: 'go'; label: string; href: Href; icon?: string }
-  | { kind: 'url'; label: string; url: string; icon?: string }
-  // Raises the support ticket the AI offered (the widget's "Raise a Ticket").
-  | { kind: 'ticket'; label: string; icon?: string };
+  | { kind: 'url'; label: string; url: string; icon?: string };
 
 export type BotReply = {
   text: string;
@@ -371,7 +369,7 @@ const AI_BUTTONS: Record<string, Action> = {
 };
 
 // The website widget's buildAiReplyResponse: one control per job, so the
-// order card's Track replaces "My orders" and Raise a Ticket replaces
+// order card's Track replaces "My orders" and the ticket card replaces
 // "My tickets", and suggestions never repeat a button.
 export function fromAiReply(data: AiReply): BotReply {
   const ticket = data.ticket?.orderId ? data.ticket : null;
@@ -379,7 +377,6 @@ export function fromAiReply(data: AiReply): BotReply {
     .filter((key) => !(data.order && key === 'open_orders') && !(ticket && key === 'open_tickets'))
     .map((key) => AI_BUTTONS[key])
     .filter(Boolean);
-  if (ticket) actions.unshift({ kind: 'ticket', label: 'Raise a ticket', icon: 'headset-outline' });
 
   const labels = new Set(actions.map((a) => a.label.toLowerCase()));
   const suggestions = data.order || ticket ? [] : (data.suggestions || []).filter((s) => !labels.has(String(s).toLowerCase()));

@@ -10,8 +10,8 @@ import { usePalette } from '@/ui/theme';
 export const MAX_ATTACHMENTS = 5;
 
 // Lets the shopper pick up to 5 photos (the server's ticket limit, 5 MB each).
-export async function pickAttachments(current: PickedImage[]): Promise<PickedImage[]> {
-  const room = MAX_ATTACHMENTS - current.length;
+export async function pickAttachments(current: PickedImage[], max = MAX_ATTACHMENTS): Promise<PickedImage[]> {
+  const room = max - current.length;
   if (room <= 0) return current;
   const res = await ImagePicker.launchImageLibraryAsync({
     mediaTypes: ['images'],
@@ -20,10 +20,7 @@ export async function pickAttachments(current: PickedImage[]): Promise<PickedIma
     quality: 0.7,
   });
   if (res.canceled) return current;
-  return [...current, ...res.assets.map((a) => ({ uri: a.uri, fileName: a.fileName, mimeType: a.mimeType }))].slice(
-    0,
-    MAX_ATTACHMENTS,
-  );
+  return [...current, ...res.assets.map((a) => ({ uri: a.uri, fileName: a.fileName, mimeType: a.mimeType }))].slice(0, max);
 }
 
 export function AttachmentThumbs({

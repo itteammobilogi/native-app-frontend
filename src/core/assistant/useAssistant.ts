@@ -9,9 +9,11 @@ import {
   type AiTicketOffer,
   type ChatTurn,
 } from '@/core/api/chatbot';
+import type { PickedImage } from '@/core/api/reviews';
 import { createTicket } from '@/core/api/tickets';
 import { useAuth } from '@/core/auth/AuthContext';
 import { fromAiReply, imageReply, respond, type BotReply } from './brain';
+import { TICKET_AGENT, TICKET_EMAIL, TICKET_NO, TICKET_YES, ticketText } from './ticketText';
 
 export type ChatMessage = {
   id: string;
@@ -19,6 +21,8 @@ export type ChatMessage = {
   createdAt: number;
   // User turns: the photo they searched with (shown as a thumbnail).
   imageUri?: string;
+  // User turns: photos sent with a support ticket.
+  photos?: string[];
   // Bot turns: the question it answers (for Retry / Regenerate / Translate).
   prompt?: string;
   fromImage?: boolean;
@@ -53,10 +57,15 @@ function thinkingStatus(text: string, hasImage: boolean): string[] {
   return ['Searching catalog…', 'Comparing prices…'];
 }
 
-// Answers to "Shall I raise a ticket?" (the widget's regexes).
-const TICKET_YES = /^(yes|yeah|yep|yup|sure|ok|okay|haan|haa|han|haanji|ji haan|bilkul|kar do)\b|raise a ticket|human agent|connect.*(agent|support)/i;
-const TICKET_NO = /^(no|nah|nope|not now|no thanks?|nahi|nahin|mat karo|rehne do)\b/i;
-const PHONE = /(?:\+?91[\s-]?)?([6-9]\d{9})\b/;
+// A ticket the AI offered, waiting on yes / no, then on a phone number or
+// email when the account has none (the backend requires both).
+type TicketDraft = AiTicketOffer & { language: AiLanguage; phone?: string; email?: string };
+type PendingTicket = { draft: TicketDraft; stage: 'offer' | 'phone' | 'email'; messageId: string };
+
+// A short reply to the offer that isn't yes / no ("hmm", "what?") gets the
+// question again; anything that reads like a new request goes to the AI.
+const NEW_REQUEST = /order|track|return|refund|cancel|replace|deliver|policy|price|\bzb|\?/i;
+const isNewRequest = (s: string) => NEW_REQUEST.test(s) || s.split(/\s+/).length > 3;
 
 const toHistory = (list: ChatMessage[]): ChatTurn[] =>
   list
@@ -73,8 +82,14 @@ export function useAssistant({ onVoiceReply }: { onVoiceReply?: (m: ChatMessage)
   const [status, setStatus] = useState<string | null>(null);
   const list = useRef(messages);
   const turn = useRef<{ id: string; controller: AbortController; timers: ReturnType<typeof setTimeout>[] } | null>(null);
-  // A ticket the AI offered and is waiting on a yes / no (or a phone number).
-  const pendingTicket = useRef<{ ticket: AiTicketOffer; needsPhone: boolean } | null>(null);
+  const pendingTicket = useRef<PendingTicket | null>(null);
+  // The bot turn whose ticket card is showing, and the photos picked on it.
+  const [ticketOfferId, setTicketOfferId] = useState<string | null>(null);
+  const [ticketPhotos, setTicketPhotoState] = useState<PickedImage[]>([]);
+  const photos = useRef<PickedImage[]>([]);
+  // Phone / email typed for a ticket, reused for the next one this session.
+  const contact = useRef<{ phone?: string; email?: string }>({});
+  const raising = useRef(false);
   const voiceReply = useRef(onVoiceReply);
 
   useEffect(() => {
@@ -102,8 +117,27 @@ export function useAssistant({ onVoiceReply }: { onVoiceReply?: (m: ChatMessage)
     const done: Partial<ChatMessage> = { ...reply, pending: false, error: undefined, fresh: true, feedback: null };
     patch(id, done);
     logTurn('assistant', reply.text, reply.products);
-    pendingTicket.current = reply.ticket ? { ticket: reply.ticket, needsPhone: false } : null;
     if (viaVoice) voiceReply.current?.({ id, role: 'bot', createdAt: Date.now(), ...reply });
+  };
+
+  const setTicketPhotos = (next: PickedImage[]) => {
+    photos.current = next;
+    setTicketPhotoState(next);
+  };
+
+  const closeTicket = () => {
+    pendingTicket.current = null;
+    setTicketOfferId(null);
+    setTicketPhotos([]);
+  };
+
+  // Any prompt the ticket flow left open is stale once the AI has answered;
+  // a ticket offer opens a new one.
+  const openTicket = (id: string, reply: BotReply) => {
+    closeTicket();
+    if (!reply.ticket) return;
+    pendingTicket.current = { draft: { ...reply.ticket, language: reply.language || 'english' }, stage: 'offer', messageId: id };
+    setTicketOfferId(id);
   };
 
   // One bot turn: AI first, rule-based replies if it fails (never after Stop).
@@ -140,6 +174,7 @@ export function useAssistant({ onVoiceReply }: { onVoiceReply?: (m: ChatMessage)
     }
     if (controller.signal.aborted) return;
     finishBot(botId, reply, !!opts.viaVoice);
+    openTicket(botId, reply);
     endTurn(botId);
   };
 
@@ -155,75 +190,135 @@ export function useAssistant({ onVoiceReply }: { onVoiceReply?: (m: ChatMessage)
     logTurn('assistant', reply.text);
   };
 
-  const raiseTicket = async (prompt = 'Yes, raise a ticket', phoneOverride?: string) => {
-    const pending = pendingTicket.current;
-    if (!pending) return;
-    const phone = phoneOverride || user?.mobile || '';
+  // Sends the ticket once the backend has everything it requires: a missing
+  // phone or email is asked for first, one at a time. Photos picked on the
+  // card go with it; if the upload is what fails, the ticket goes again
+  // without them so the complaint isn't lost (as the widget).
+  const raiseTicket = async (prompt: string, pending: PendingTicket, typed: { phone?: string; email?: string } = {}) => {
+    const t = ticketText(pending.draft.language);
     if (!isLoggedIn) {
-      say(prompt, { text: 'Please sign in so I can raise a ticket for your order.', actions: [{ kind: 'go', label: 'Sign in', href: '/login', icon: 'log-in-outline' }] });
+      closeTicket();
+      say(prompt, { text: t.signIn, actions: [{ kind: 'go', label: 'Sign in', href: '/login', icon: 'log-in-outline' }] });
       return;
     }
-    if (!phone) {
-      pendingTicket.current = { ...pending, needsPhone: true };
-      say(prompt, { text: "What's the best phone number to reach you on for this ticket?" });
+    const phone = (typed.phone || pending.draft.phone || contact.current.phone || user?.mobile || '').trim();
+    const email = (typed.email || pending.draft.email || contact.current.email || user?.email || '').trim();
+    if (typed.phone || typed.email) contact.current = { phone, email };
+    const draft = { ...pending.draft, phone, email };
+
+    if (!phone || !email) {
+      pendingTicket.current = { ...pending, draft, stage: phone ? 'email' : 'phone' };
+      setTicketOfferId(null);
+      say(prompt, { text: phone ? t.askEmail : t.askPhone });
       return;
     }
+
+    const images = photos.current;
     pendingTicket.current = null;
+    setTicketOfferId(null);
+    raising.current = true;
     const botId = uid();
     const now = Date.now();
     update((prev) => [
       ...prev,
-      { id: uid(), role: 'user', text: phoneOverride ? phone : prompt, createdAt: now },
+      { id: uid(), role: 'user', text: prompt, photos: images.length ? images.map((p) => p.uri) : undefined, createdAt: now },
       { id: botId, role: 'bot', text: '', createdAt: now + 1, prompt, pending: true },
     ]);
+    logTurn('user', prompt);
     setStatus('Raising your ticket…');
-    const { ticket } = pending;
+    const fields = {
+      orderId: draft.orderId,
+      subject: draft.subject,
+      description: draft.description,
+      name: user?.name || 'ZillyBuy customer',
+      phone,
+      email,
+    };
+    const openTickets = { kind: 'go', label: t.openTicket, href: '/tickets', icon: 'chatbubbles-outline' } as const;
     try {
-      await createTicket({
-        orderId: ticket.orderId,
-        subject: ticket.subject,
-        description: ticket.description,
-        name: user?.name || 'ZillyBuy customer',
-        phone,
-        email: user?.email || '',
-      });
+      let photosLost = false;
+      try {
+        await createTicket({ ...fields, images });
+      } catch (e) {
+        if (!images.length) throw e;
+        await createTicket(fields);
+        photosLost = true;
+      }
+      setTicketPhotos([]);
       finishBot(
         botId,
-        {
-          text: `Done — I've raised a support ticket for Order #${ticket.orderLabel}. Our team will reach out to you by email or phone soon.`,
-          actions: [{ kind: 'go', label: 'View my tickets', href: '/tickets', icon: 'chatbubbles-outline' }],
-        },
+        { text: photosLost ? t.photoFailed(draft.orderLabel) : t.raised(draft.orderLabel, images.length), actions: [openTickets] },
         false,
       );
     } catch {
+      // Keep the draft (and photos) so "Try again" sends the same ticket.
+      pendingTicket.current = { ...pending, draft, stage: 'offer' };
       finishBot(
         botId,
-        {
-          text: "Sorry, I couldn't raise the ticket automatically. Please try from the Tickets page.",
-          actions: [{ kind: 'go', label: 'Open tickets', href: '/tickets', icon: 'chatbubbles-outline' }],
-        },
+        { text: t.failed, actions: [{ kind: 'send', label: t.retry, value: t.sendRaise, icon: 'refresh' }, openTickets] },
         false,
       );
+    } finally {
+      raising.current = false;
+      setStatus(null);
     }
-    setStatus(null);
+  };
+
+  // A typed (or tapped) answer while a ticket is open; false when the
+  // message is a new request for the AI.
+  const answerTicket = (content: string, pending: PendingTicket): boolean => {
+    const t = ticketText(pending.draft.language);
+    const decline = () => {
+      closeTicket();
+      say(content, { text: t.declined, suggestions: ['Track my order', 'Return policy'] });
+    };
+
+    if (pending.stage === 'phone') {
+      const phone = content.replace(/[^\d+]/g, '');
+      if (phone.length >= 7) void raiseTicket(content, pending, { phone });
+      else if (TICKET_NO.test(content)) decline();
+      else say(content, { text: t.badPhone });
+      return true;
+    }
+    if (pending.stage === 'email') {
+      const email = content.match(TICKET_EMAIL)?.[0];
+      if (email) void raiseTicket(content, pending, { email: email.toLowerCase() });
+      else if (TICKET_NO.test(content)) decline();
+      else say(content, { text: t.badEmail });
+      return true;
+    }
+
+    if (TICKET_AGENT.test(content)) {
+      const { draft } = pending;
+      const description = `${draft.description || ''} The user asked to be connected with a human agent.`.trim();
+      void raiseTicket(content, { ...pending, draft: { ...draft, subject: 'Human agent requested via chatbot', description } });
+      return true;
+    }
+    if (TICKET_YES.test(content)) {
+      void raiseTicket(content, pending);
+      return true;
+    }
+    if (TICKET_NO.test(content)) {
+      decline();
+      return true;
+    }
+    if (!isNewRequest(content)) {
+      say(content, { text: t.reAsk, actions: [{ kind: 'send', label: t.raise, value: t.sendRaise, icon: 'headset-outline' }] });
+      return true;
+    }
+    return false;
   };
 
   const send = (text: string, { photo, viaVoice = false }: { photo?: PickedPhoto; viaVoice?: boolean } = {}) => {
     const content = text.trim().slice(0, 500);
-    if ((!content && !photo) || turn.current) return;
+    if ((!content && !photo) || turn.current || raising.current) return;
 
-    // A typed answer to the ticket offer is finished by the ticket flow;
-    // anything else is a new request for the AI.
+    // Answers to the ticket offer are finished by the ticket flow; anything
+    // else (or a photo search) is a new request for the AI.
     const pending = pendingTicket.current;
-    if (pending && !photo) {
-      const phone = content.match(PHONE)?.[1];
-      if (pending.needsPhone && phone) return void raiseTicket(content, phone);
-      if (!pending.needsPhone && TICKET_YES.test(content)) return void raiseTicket(content);
-      if (TICKET_NO.test(content)) {
-        pendingTicket.current = null;
-        return say(content, { text: 'No problem. Anything else I can help you with?', suggestions: ['Track my order', 'Return policy'] });
-      }
-      pendingTicket.current = null;
+    if (pending) {
+      if (!photo && answerTicket(content, pending)) return;
+      closeTicket();
     }
 
     const history = toHistory(list.current);
@@ -276,12 +371,12 @@ export function useAssistant({ onVoiceReply }: { onVoiceReply?: (m: ChatMessage)
 
   const clear = () => {
     stop();
-    pendingTicket.current = null;
+    closeTicket();
     update(() => []);
     resetChatSession();
   };
 
   const busy = messages.some((m) => m.pending);
 
-  return { messages, busy, status, send, stop, regenerate, rate, raiseTicket: () => raiseTicket(), settle, clear };
+  return { messages, busy, status, send, stop, regenerate, rate, settle, clear, ticketOfferId, ticketPhotos, setTicketPhotos };
 }
