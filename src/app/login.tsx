@@ -1,7 +1,6 @@
-import { Image } from 'expo-image';
 import { router, useLocalSearchParams, type Href } from 'expo-router';
 import { useEffect, useState } from 'react';
-import { KeyboardAvoidingView, Platform, ScrollView, StyleSheet, View } from 'react-native';
+import { KeyboardAvoidingView, Platform, ScrollView, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import {
@@ -21,15 +20,15 @@ import { Button, IconButton } from '@/ui/Button';
 import { Chip } from '@/ui/Chip';
 import { Glass } from '@/ui/Glass';
 import { Input } from '@/ui/Input';
+import { LogoLockup } from '@/ui/Logo';
 import { Screen } from '@/ui/Screen';
 import { Text } from '@/ui/Text';
-import { radius, usePalette } from '@/ui/theme';
+import { radius } from '@/ui/theme';
 import { useToast } from '@/ui/Toast';
 
 type Mode = 'otp' | 'password' | 'forgot';
 
 export default function LoginScreen() {
-  const t = usePalette();
   const insets = useSafeAreaInsets();
   const toast = useToast();
   const { completeLogin } = useAuth();
@@ -60,9 +59,7 @@ export default function LoginScreen() {
           </View>
 
           <View style={{ alignItems: 'center', marginTop: 12, marginBottom: 28, gap: 12 }}>
-            <Glass radius={32} style={styles.logo}>
-              <Image source={require('@/assets/brand/icon.png')} style={{ width: 84, height: 84 }} tintColor={t.text} contentFit="contain" />
-            </Glass>
+            <LogoLockup height={40} style={{ marginBottom: 8 }} />
             <Text variant="display">
               {mode === 'forgot' ? 'Reset password' : 'Login or sign up'}
             </Text>
@@ -115,22 +112,34 @@ function OtpForm({ onDone }: { onDone: (r: LoginResponse) => Promise<void> }) {
   const [mobile, setMobile] = useState('');
   const [otp, setOtp] = useState('');
   const [sent, setSent] = useState(false);
+  const [sending, setSending] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [left, setLeft] = useCountdown();
 
+  // The server only answers once the SMS gateway has (several seconds), so the
+  // OTP box opens straight away and the request finishes in the background.
+  // On failure it closes again with the error under the number.
   const send = async () => {
     if (!isValidMobile(mobile)) return setError('Enter a valid 10-digit mobile number');
-    setBusy(true);
     setError('');
+    setSent(true);
+    setSending(true);
+    // Resend waits a minute so the SMS has time to arrive (the server's own
+    // cooldown is 30 s, so it never refuses a resend at this point). The OTP
+    // itself stays valid for 10 minutes.
+    setLeft(60);
     try {
       await sendCheckoutOtp(mobile);
-      setSent(true);
-      setLeft(30); // server enforces a 30s resend cooldown
-    } catch (e) {
+    } catch (e: any) {
+      // 429: an OTP is already on its way, so keep the box open.
+      if (e?.response?.status !== 429) {
+        setSent(false);
+        setLeft(0);
+      }
       setError(errorMessage(e));
     } finally {
-      setBusy(false);
+      setSending(false);
     }
   };
 
@@ -184,10 +193,10 @@ function OtpForm({ onDone }: { onDone: (r: LoginResponse) => Promise<void> }) {
         <>
           <Button title="Verify & continue" onPress={verify} loading={busy} />
           <Button
-            title={left > 0 ? `Resend OTP in ${left}s` : 'Resend OTP'}
+            title={sending ? 'Sending OTP…' : left > 0 ? `Resend OTP in ${left}s` : 'Resend OTP'}
             variant="ghost"
             size="md"
-            disabled={left > 0 || busy}
+            disabled={sending || left > 0 || busy}
             onPress={send}
           />
         </>
@@ -344,7 +353,3 @@ function ForgotForm({ onDone }: { onDone: () => void }) {
     </>
   );
 }
-
-const styles = StyleSheet.create({
-  logo: { width: 104, height: 104, alignItems: 'center', justifyContent: 'center' },
-});

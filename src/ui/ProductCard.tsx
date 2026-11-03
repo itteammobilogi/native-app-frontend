@@ -5,6 +5,7 @@ import { Pressable, StyleSheet, View } from 'react-native';
 
 import type { ProductSummary } from '@/core/api/catalog';
 import { isProductUnavailable } from '@/core/pricing';
+import { openingProduct } from '@/core/productPreview';
 import { tap } from './Button';
 import { Glass } from './Glass';
 import { Price } from './Price';
@@ -21,6 +22,7 @@ export function ProductCard({ product, width }: { product: ProductSummary; width
     <Pressable
       accessibilityRole="link"
       accessibilityLabel={product.name}
+      onPressIn={() => openingProduct(product)}
       onPress={() => {
         tap();
         router.push({ pathname: '/product/[slug]', params: { slug: product.slug } });

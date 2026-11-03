@@ -85,7 +85,11 @@ export async function downloadInvoice(orderId: number, orderRef: string) {
 // ---- Checkout ----
 
 // Binds the address to the cart's transactions and starts ONDC /init on the
-// server. Passing an existing address id reuses it.
+// server. Passing an existing address id reuses it. When the address pincode
+// differs from the one the items were added under, the server first re-quotes
+// with the seller and waits up to 20 s for the answer
+// (reselectForAddressPincode), so this call gets more than the client's
+// default 20 s timeout, which used to abort it mid-wait.
 export const submitBilling = (address: Address, transactionIds: number[]) =>
   api
     .post<{ message: string; address_id: number }>('/api/products/cart/userCheckout', {
@@ -103,7 +107,7 @@ export const submitBilling = (address: Address, transactionIds: number[]) =>
       tax_number: address.tax_number ?? null,
       is_default: address.is_default,
       transactionIds,
-    })
+    }, { timeout: 45000 })
     .then((r) => r.data);
 
 export type CashfreeOrder = {

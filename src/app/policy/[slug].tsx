@@ -19,7 +19,10 @@ export default function PolicyScreen() {
   const t = usePalette();
   const known = slug in POLICIES;
   const title = known ? POLICIES[slug as PolicySlug] : 'Policy';
-  const doc = useAsync(() => (known ? getPolicy(slug as PolicySlug) : Promise.resolve([])), [slug]);
+  const doc = useAsync(() => (known ? getPolicy(slug as PolicySlug) : Promise.resolve([])), [slug], {
+    key: 'policy',
+    staleTime: 60 * 60_000,
+  });
 
   if (!known) {
     return (

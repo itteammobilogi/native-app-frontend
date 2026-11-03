@@ -1,7 +1,7 @@
 import { ActivityIndicator, FlatList, RefreshControl, View } from 'react-native';
 
 import { listBlogs } from '@/core/api/blogs';
-import { usePaged } from '@/core/hooks/useAsync';
+import { FIVE_MIN, usePaged } from '@/core/hooks/useAsync';
 import { BlogCard } from '@/ui/BlogCard';
 import { usePageInsets } from '@/ui/GlassTabBar';
 import { EmptyState, ErrorState, Header, Screen } from '@/ui/Screen';
@@ -13,7 +13,7 @@ import { radius, usePalette } from '@/ui/theme';
 export default function BlogsScreen() {
   const t = usePalette();
   const insets = usePageInsets();
-  const list = usePaged((page) => listBlogs(page), []);
+  const list = usePaged((page) => listBlogs(page), [], { key: 'blogs', staleTime: FIVE_MIN });
 
   return (
     <Screen tabBar="index">

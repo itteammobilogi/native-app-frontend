@@ -5,6 +5,7 @@ import { Linking, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { tap } from '@/ui/Button';
 import { Glass } from '@/ui/Glass';
 import { usePageInsets } from '@/ui/GlassTabBar';
+import { Logo } from '@/ui/Logo';
 import { Header, Screen } from '@/ui/Screen';
 import { Text } from '@/ui/Text';
 import { radius, usePalette } from '@/ui/theme';
@@ -39,7 +40,7 @@ export default function ConnectScreen() {
       <ScrollView contentContainerStyle={{ padding: 16, gap: 12, paddingBottom: insets.bottom + 32 }}>
         <View style={{ alignItems: 'center', gap: 8, paddingVertical: 12 }}>
           <Image source={require('../../assets/brand/icon.png')} style={styles.logo} />
-          <Text variant="title">ZillyBuy</Text>
+          <Logo height={36} />
           <Text tone="muted" style={{ textAlign: 'center' }}>
             Shop smarter. Stay connected. All our official links in one place.
           </Text>

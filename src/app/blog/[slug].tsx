@@ -6,7 +6,7 @@ import { WebView, type WebViewMessageEvent } from 'react-native-webview';
 
 import { authorPhoto, blogAsset, blogDate, getBlog, listBlogs } from '@/core/api/blogs';
 import { WEBSITE_URL } from '@/core/config';
-import { useAsync } from '@/core/hooks/useAsync';
+import { FIVE_MIN, useAsync } from '@/core/hooks/useAsync';
 import { openSiteLink } from '@/core/links';
 import { BlogCard } from '@/ui/BlogCard';
 import { IconButton, tap } from '@/ui/Button';
@@ -75,7 +75,7 @@ export default function BlogScreen() {
   const { slug } = useLocalSearchParams<{ slug: string }>();
   const t = usePalette();
   const insets = usePageInsets();
-  const blog = useAsync(() => getBlog(slug), [slug]);
+  const blog = useAsync(() => getBlog(slug), [slug], { key: 'blog', staleTime: FIVE_MIN });
   const latest = useAsync(() => listBlogs(1, 6).then((r) => r.items.filter((p) => p.slug !== slug).slice(0, 4)), [slug]);
   const [height, setHeight] = useState(0);
   const b = blog.data;

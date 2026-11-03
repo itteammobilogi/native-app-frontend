@@ -10,6 +10,7 @@ import { useAuth } from '@/core/auth/AuthContext';
 import { getPushStatus, openNotificationSettings, syncPush } from '@/core/push';
 import { Button, tap } from '@/ui/Button';
 import { Glass } from '@/ui/Glass';
+import { PoweredByOndc } from '@/ui/Logo';
 import { Screen } from '@/ui/Screen';
 import { Text } from '@/ui/Text';
 import { radius, TAB_BAR_HEIGHT, usePalette } from '@/ui/theme';
@@ -131,8 +132,9 @@ export default function AccountScreen() {
 
         {isLoggedIn && <Button title="Log out" icon="log-out-outline" variant="glass" onPress={confirmLogout} />}
 
+        <PoweredByOndc style={{ marginTop: 8 }} />
         <Text variant="caption" tone="faint" style={{ textAlign: 'center' }}>
-          ZillyBuy v{Constants.expoConfig?.version ?? '1.0.0'} · Powered by ONDC
+          ZillyBuy v{Constants.expoConfig?.version ?? '1.0.0'}
         </Text>
       </ScrollView>
     </Screen>

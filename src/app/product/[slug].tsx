@@ -2,7 +2,7 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 import { Image } from 'expo-image';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useEffect, useMemo, useState } from 'react';
-import { FlatList, Pressable, ScrollView, Share, StyleSheet, useWindowDimensions, View } from 'react-native';
+import { Pressable, ScrollView, Share, StyleSheet, useWindowDimensions, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import {
@@ -19,6 +19,7 @@ import { useCart } from '@/core/cart/CartContext';
 import { attributeLabel, colourNameMap, swatchHex } from '@/core/colourNames';
 import { WEBSITE_URL } from '@/core/config';
 import { useAsync } from '@/core/hooks/useAsync';
+import { PRODUCT_CACHE, productPreview } from '@/core/productPreview';
 import { useLocation } from '@/core/location/LocationContext';
 import { useSaved } from '@/core/saved/SavedContext';
 import { Button, IconButton, tap } from '@/ui/Button';
@@ -46,13 +47,16 @@ export default function ProductScreen() {
   const cart = useCart();
   const { pincodeId } = useLocation();
 
-  const product = useAsync(() => getProduct(slug), [slug]);
+  const product = useAsync(() => getProduct(slug), [slug], PRODUCT_CACHE);
   const p = product.data;
+  // The tapped card's name, image and price, shown while the details load.
+  const preview = productPreview(slug);
   // Reviews are keyed by the product group id; first page sorted by
   // "helpful" feeds both the rating pill and the Top reviews list.
   const reviews = useAsync(
     () => (p ? getProductReviews(p.id, { limit: 2, sort: 'helpful' }) : Promise.resolve(undefined)),
     [p?.id],
+    { key: 'product:top-reviews' },
   );
   const rating = reviews.data?.summary;
   const related = useAsync(
@@ -62,7 +66,8 @@ export default function ProductScreen() {
             r.items.filter((x) => x.slug !== slug),
           )
         : Promise.resolve([]),
-    [p?.category, p?.subcategory],
+    [p?.category, p?.subcategory, slug],
+    { key: 'product:related' },
   );
 
   const [variantId, setVariantId] = useState<number | null>(null);
@@ -111,6 +116,13 @@ export default function ProductScreen() {
 
   const addToCart = async (mode: 'cart' | 'buy') => {
     if (!p || !variant) return;
+    // Buy now on something already in the cart goes straight to it. Adding
+    // again would change the quantity, which makes the seller re-quote (6-8 s
+    // of "Confirming prices") before checkout opens.
+    if (mode === 'buy' && cart.has(variant.id)) {
+      router.push('/cart');
+      return;
+    }
     setAdding(mode);
     try {
       // ONDC ids come from the product (seller) and the variant (item/location).
@@ -152,27 +164,32 @@ export default function ProductScreen() {
         {/* Gallery */}
         <View style={{ paddingTop: insets.top + 60, paddingHorizontal: 16 }}>
           <Glass radius={radius.xl} style={{ overflow: 'hidden' }}>
+            {/* A handful of photos: a paging ScrollView, not a virtualized list. */}
             <View style={{ backgroundColor: '#fff', height: imgW, borderRadius: radius.xl, overflow: 'hidden' }}>
               {product.loading ? (
-                <Skeleton height={imgW} r={0} />
+                preview?.image ? (
+                  <View style={{ width: imgW, height: imgW, alignItems: 'center', justifyContent: 'center' }}>
+                    <Image source={{ uri: preview.image }} style={{ width: '90%', height: '90%' }} contentFit="contain" />
+                  </View>
+                ) : (
+                  <Skeleton height={imgW} r={0} />
+                )
               ) : (
-                <FlatList
-                  data={gallery.length ? gallery : [null]}
+                <ScrollView
                   horizontal
                   pagingEnabled
                   showsHorizontalScrollIndicator={false}
-                  keyExtractor={(u, i) => `${u}-${i}`}
-                  onMomentumScrollEnd={(e) => setImgIndex(Math.round(e.nativeEvent.contentOffset.x / imgW))}
-                  renderItem={({ item }) => (
-                    <View style={{ width: imgW, height: imgW, alignItems: 'center', justifyContent: 'center' }}>
+                  onMomentumScrollEnd={(e) => setImgIndex(Math.round(e.nativeEvent.contentOffset.x / imgW))}>
+                  {(gallery.length ? gallery : [null]).map((item, i) => (
+                    <View key={`${item}-${i}`} style={{ width: imgW, height: imgW, alignItems: 'center', justifyContent: 'center' }}>
                       {item ? (
                         <Image source={{ uri: item }} style={{ width: '90%', height: '90%' }} contentFit="contain" transition={200} />
                       ) : (
                         <Ionicons name="image-outline" size={48} color="#C7CED9" />
                       )}
                     </View>
-                  )}
-                />
+                  ))}
+                </ScrollView>
               )}
             </View>
           </Glass>
@@ -190,7 +207,15 @@ export default function ProductScreen() {
 
         {/* Info */}
         <View style={{ padding: 16, gap: 14 }}>
-          {product.loading || !p ? (
+          {product.loading && preview ? (
+            <Glass radius={radius.lg} style={{ padding: 16, gap: 10 }}>
+              <Text variant="title" style={{ fontSize: 20, lineHeight: 26 }}>
+                {preview.name}
+              </Text>
+              <Price product={preview} size="lg" />
+              <Skeleton width="60%" />
+            </Glass>
+          ) : product.loading || !p ? (
             <Glass style={{ padding: 16, gap: 10 }}>
               <Skeleton width="40%" />
               <Skeleton height={22} />

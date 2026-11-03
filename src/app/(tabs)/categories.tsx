@@ -5,7 +5,7 @@ import { Pressable, RefreshControl, ScrollView, StyleSheet, View } from 'react-n
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { absUrl, DOMAIN_META, domainName, getDomains } from '@/core/api/catalog';
-import { useAsync } from '@/core/hooks/useAsync';
+import { DOMAINS_CACHE, useAsync } from '@/core/hooks/useAsync';
 import { tap } from '@/ui/Button';
 import { Glass } from '@/ui/Glass';
 import { Screen } from '@/ui/Screen';
@@ -16,7 +16,7 @@ import { radius, TAB_BAR_HEIGHT, usePalette } from '@/ui/theme';
 export default function CategoriesScreen() {
   const t = usePalette();
   const insets = useSafeAreaInsets();
-  const domains = useAsync(getDomains, []);
+  const domains = useAsync(getDomains, [], DOMAINS_CACHE);
 
   return (
     <Screen>

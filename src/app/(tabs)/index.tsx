@@ -22,7 +22,7 @@ import {
   getTrending,
   type Banner,
 } from '@/core/api/catalog';
-import { useAsync } from '@/core/hooks/useAsync';
+import { DOMAINS_CACHE, FIVE_MIN, useAsync } from '@/core/hooks/useAsync';
 import { openSiteLink } from '@/core/links';
 import { useLocation } from '@/core/location/LocationContext';
 import { IconButton, tap } from '@/ui/Button';
@@ -31,7 +31,8 @@ import { BannerCarousel } from '@/ui/BannerCarousel';
 import { BrandTile } from '@/ui/BrandTile';
 import { ComboTile } from '@/ui/ComboTile';
 import { Glass } from '@/ui/Glass';
-import { useIntroRevealed } from '@/ui/introGate';
+import { useRevealStage } from '@/ui/introGate';
+import { LogoLockup, PoweredByOndc } from '@/ui/Logo';
 import { PincodeSheet } from '@/ui/PincodeSheet';
 import { ProductRail } from '@/ui/ProductRail';
 import { Screen, SectionTitle } from '@/ui/Screen';
@@ -49,24 +50,30 @@ export default function HomeScreen() {
 
   // Each strip loads independently (like the website), so one slow or failing
   // source doesn't blank the whole page.
-  const banners = useAsync(() => getBanners().catch(() => [] as Banner[]), []);
-  const filters = useAsync(() => getQuickFilters().catch(() => []), []);
-  const domains = useAsync(getDomains, []);
-  const deals = useAsync(getDeals, []);
-  const trending = useAsync(getTrending, []);
-  const brands = useAsync(() => listBrands({ featured: true, limit: 12 }).then((p) => p.items), []);
+  const banners = useAsync(() => getBanners().catch(() => [] as Banner[]), [], { key: 'home:banners', persist: true, staleTime: FIVE_MIN });
+  const filters = useAsync(() => getQuickFilters().catch(() => []), [], { key: 'home:filters', persist: true, staleTime: FIVE_MIN });
+  const domains = useAsync(getDomains, [], DOMAINS_CACHE);
+  const deals = useAsync(getDeals, [], { key: 'home:deals', persist: true });
+  const trending = useAsync(getTrending, [], { key: 'home:trending', persist: true });
+  // ~420 kB per call (each brand carries its page HTML), so only the tile's
+  // fields are kept, and like the website it's refreshed every 10 minutes.
+  const brands = useAsync(
+    () => listBrands({ featured: true, limit: 12 }).then((p) => p.items.map(({ id, name, slug, logo }) => ({ id, name, slug, logo }))),
+    [],
+    { key: 'home:brands', persist: true, staleTime: 10 * 60_000 },
+  );
 
   const refreshing = deals.refreshing || trending.refreshing;
   const { recent, wishlist } = useSaved();
   const unread = useUnreadNotifications();
-  const combos = useAsync(() => listCombos().catch(() => [] as Combo[]), []);
+  const combos = useAsync(() => listCombos().catch(() => [] as Combo[]), [], { key: 'home:combos', persist: true, staleTime: FIVE_MIN });
 
   const onRefresh = () => [banners, filters, domains, deals, trending, brands, combos].forEach((s) => s.refresh());
 
   const firstName = user?.name?.trim().split(/\s+/)[0];
-  // Below the search bar, wait for the launch intro to settle before mounting
-  // (the data above is already loading).
-  const revealed = useIntroRevealed();
+  // Below the search bar, wait for the launch intro to settle, then mount the
+  // page a few sections per frame, top first (the data is already loading).
+  const stage = useRevealStage(4);
 
   return (
     <Screen>
@@ -80,9 +87,7 @@ export default function HomeScreen() {
             <Text variant="caption" tone="muted">
               {firstName ? `Hi ${firstName} 👋` : 'Welcome to'}
             </Text>
-            <Text variant="title" style={{ fontSize: 24 }}>
-              Zilly<Text variant="title" tone="primary" style={{ fontSize: 24 }}>Buy</Text>
-            </Text>
+            <LogoLockup height={26} />
           </View>
           <View style={{ flexDirection: 'row', gap: 10 }}>
             <IconButton icon="heart-outline" label="Wishlist" badge={wishlist.length} onPress={() => router.push('/wishlist')} />
@@ -112,7 +117,7 @@ export default function HomeScreen() {
           </Glass>
         </Pressable>
 
-        {revealed && (
+        {stage >= 1 && (
           <>
             <BannerCarousel banners={banners.data} loading={banners.loading} />
 
@@ -141,8 +146,8 @@ export default function HomeScreen() {
 
             {/* Categories */}
             <SectionTitle title="Shop by category" action="See all" onAction={() => router.push('/categories')} />
-            <View style={styles.catGrid}>
-              {(domains.data ?? []).slice(0, 8).map((d) => {
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.catRow}>
+              {(domains.data ?? []).map((d) => {
                 const meta = DOMAIN_META[d.slug];
                 return (
                   <Pressable
@@ -163,14 +168,18 @@ export default function HomeScreen() {
                 );
               })}
               {domains.loading &&
-                Array.from({ length: 8 }).map((_, i) => (
+                Array.from({ length: 5 }).map((_, i) => (
                   <View key={i} style={styles.catItem}>
-                    <Skeleton height={72} r={radius.lg} />
+                    <Skeleton height={CAT_TILE} r={radius.lg} />
                     <Skeleton width="70%" height={10} />
                   </View>
                 ))}
-            </View>
+            </ScrollView>
+          </>
+        )}
 
+        {stage >= 2 && (
+          <>
             {/* Brands: featured strip, "See all" opens the full searchable list */}
             {(brands.loading || !!brands.data?.length) && (
               <View style={{ marginTop: 8 }}>
@@ -198,8 +207,12 @@ export default function HomeScreen() {
                 </ScrollView>
               </View>
             )}
+          </>
+        )}
 
-            <ProductRail title="Recently viewed" icon="time-outline" items={recent} loading={false} />
+        {stage >= 3 && (
+          <>
+            <ProductRail title="Recently viewed" icon="time-outline" items={recent.slice(0, 12)} loading={false} />
 
             <ProductRail
               title="Deals of the day"
@@ -208,6 +221,11 @@ export default function HomeScreen() {
               loading={deals.loading}
               onSeeAll={() => router.push({ pathname: '/products', params: { flag: 'deals', title: 'Deals of the day' } })}
             />
+          </>
+        )}
+
+        {stage >= 4 && (
+          <>
             <ProductRail
               title="Trending now"
               icon="trending-up"
@@ -231,6 +249,8 @@ export default function HomeScreen() {
                 </View>
               ))}
             </Glass>
+
+            <PoweredByOndc style={{ marginTop: 24 }} />
           </>
         )}
       </ScrollView>
@@ -258,6 +278,7 @@ export default function HomeScreen() {
 }
 
 const BRAND_TILE = 96;
+const CAT_TILE = 76;
 
 const pillIcon = (name?: string): keyof typeof Ionicons.glyphMap =>
   (({ tag: 'pricetag', flame: 'flame', percent: 'pricetags', sparkles: 'sparkles', zap: 'flash' }) as const)[
@@ -271,9 +292,9 @@ const styles = StyleSheet.create({
   searchKbd: { width: 40, height: 40, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
   pills: { paddingHorizontal: 16, gap: 10, marginBottom: 22 },
   pill: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 14, paddingVertical: 9 },
-  catGrid: { flexDirection: 'row', flexWrap: 'wrap', paddingHorizontal: 10 },
-  catItem: { width: '25%', paddingHorizontal: 6, marginBottom: 14, alignItems: 'center', gap: 6 },
-  catTile: { width: '100%', aspectRatio: 1, alignItems: 'center', justifyContent: 'center', overflow: 'hidden' },
+  catRow: { paddingHorizontal: 16, gap: 12, marginBottom: 14 },
+  catItem: { width: CAT_TILE, alignItems: 'center', gap: 6 },
+  catTile: { width: CAT_TILE, height: CAT_TILE, alignItems: 'center', justifyContent: 'center', overflow: 'hidden' },
   catImage: { width: '100%', height: '100%' },
   aiLauncher: { position: 'absolute', right: 16 },
   aiPill: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingLeft: 5, paddingRight: 14, paddingVertical: 5 },

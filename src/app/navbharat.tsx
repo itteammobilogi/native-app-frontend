@@ -10,7 +10,7 @@ import {
   groupDomains,
   listNavbharat,
 } from '@/core/api/navbharat';
-import { useAsync, usePaged } from '@/core/hooks/useAsync';
+import { FIVE_MIN, useAsync, usePaged } from '@/core/hooks/useAsync';
 import { BannerCarousel } from '@/ui/BannerCarousel';
 import { Chip } from '@/ui/Chip';
 import { Input } from '@/ui/Input';
@@ -45,9 +45,9 @@ export default function NavbharatScreen() {
     return () => clearTimeout(id);
   }, [query]);
 
-  const banners = useAsync(() => getNavbharatBanners().catch(() => []), []);
-  const categories = useAsync(() => getNavbharatCategories().catch(() => []), []);
-  const deals = useAsync(() => listNavbharat({ deals: true, limit: 12 }).then((p) => p.items), []);
+  const banners = useAsync(() => getNavbharatBanners().catch(() => []), [], { key: 'navbharat:banners', staleTime: FIVE_MIN });
+  const categories = useAsync(() => getNavbharatCategories().catch(() => []), [], { key: 'navbharat:categories', staleTime: FIVE_MIN });
+  const deals = useAsync(() => listNavbharat({ deals: true, limit: 12 }).then((p) => p.items), [], { key: 'navbharat:deals' });
   const domains = groupDomains(categories.data ?? []);
 
   const domainSlug = filter.kind === 'domain' ? filter.slug : undefined;

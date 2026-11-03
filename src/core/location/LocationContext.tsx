@@ -12,6 +12,7 @@ type SavedLoc = NonNullable<Loc>;
 
 type LocationState = {
   location: Loc;
+  ready: boolean; // false until the saved location has been read
   pincodeId: number;
   recent: SavedLoc[];
   setPincode: (pincode: string) => Promise<Loc>;
@@ -40,16 +41,20 @@ export const placeLabel = (p: PincodeLocation) => `${placeName(p.office_name)}, 
 export function LocationProvider({ children }: { children: React.ReactNode }) {
   const [location, setLocation] = useState<Loc>(null);
   const [recent, setRecent] = useState<SavedLoc[]>([]);
+  const [ready, setReady] = useState(false);
 
   useEffect(() => {
-    read(KEY).then((raw) => {
-      if (!raw) return;
-      try {
-        setLocation(JSON.parse(raw));
-      } catch {
-        /* ignore corrupt value */
-      }
-    });
+    read(KEY)
+      .then((raw) => {
+        if (!raw) return;
+        try {
+          setLocation(JSON.parse(raw));
+        } catch {
+          /* ignore corrupt value */
+        }
+      })
+      .catch(() => {})
+      .finally(() => setReady(true));
     read(RECENT_KEY).then((raw) => {
       if (!raw) return;
       try {
@@ -96,13 +101,14 @@ export function LocationProvider({ children }: { children: React.ReactNode }) {
   const value = useMemo(
     () => ({
       location,
+      ready,
       pincodeId: location?.pincodeId ?? DEFAULT_PINCODE_ID,
       recent,
       setPincode,
       selectLocation,
       selectRecent,
     }),
-    [location, recent, setPincode, selectLocation, selectRecent],
+    [location, ready, recent, setPincode, selectLocation, selectRecent],
   );
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }

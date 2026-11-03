@@ -1,7 +1,7 @@
 import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useEffect, useRef, useState } from 'react';
-import { FlatList, Pressable, StyleSheet, useWindowDimensions, View } from 'react-native';
+import { Pressable, ScrollView, StyleSheet, useWindowDimensions, View } from 'react-native';
 
 import type { Banner } from '@/core/api/catalog';
 import { openSiteLink } from '@/core/links';
@@ -18,7 +18,7 @@ export function BannerCarousel({ banners, loading, aspect = 0.5 }: { banners?: B
   const w = width - 32;
   const h = Math.round(w * aspect);
   const [index, setIndex] = useState(0);
-  const ref = useRef<FlatList<Banner>>(null);
+  const ref = useRef<ScrollView>(null);
   const count = banners?.length ?? 0;
 
   useEffect(() => {
@@ -26,7 +26,7 @@ export function BannerCarousel({ banners, loading, aspect = 0.5 }: { banners?: B
     const id = setInterval(() => {
       setIndex((i) => {
         const next = (i + 1) % count;
-        ref.current?.scrollToOffset({ offset: next * (w + 12), animated: true });
+        ref.current?.scrollTo({ x: next * (w + 12), animated: true });
         return next;
       });
     }, 4500);
@@ -38,18 +38,17 @@ export function BannerCarousel({ banners, loading, aspect = 0.5 }: { banners?: B
 
   return (
     <View style={{ marginBottom: 18 }}>
-      <FlatList
+      {/* A few banners: a plain ScrollView, not a virtualized list. */}
+      <ScrollView
         ref={ref}
-        data={banners}
         horizontal
         showsHorizontalScrollIndicator={false}
         snapToInterval={w + 12}
         decelerationRate="fast"
         contentContainerStyle={{ paddingHorizontal: 16, gap: 12 }}
-        keyExtractor={(b) => String(b.id)}
-        onMomentumScrollEnd={(e) => setIndex(Math.round(e.nativeEvent.contentOffset.x / (w + 12)))}
-        renderItem={({ item }) => (
-          <Pressable onPress={() => (tap(), openSiteLink(item.link_url))}>
+        onMomentumScrollEnd={(e) => setIndex(Math.round(e.nativeEvent.contentOffset.x / (w + 12)))}>
+        {banners!.map((item) => (
+          <Pressable key={item.id} onPress={() => (tap(), openSiteLink(item.link_url))}>
             <Glass radius={radius.xl} style={{ width: w, height: h, overflow: 'hidden' }}>
               <Image
                 source={{ uri: item.image }}
@@ -61,8 +60,8 @@ export function BannerCarousel({ banners, loading, aspect = 0.5 }: { banners?: B
               <LinearGradient colors={['transparent', 'rgba(0,0,0,0.25)']} style={StyleSheet.absoluteFill} />
             </Glass>
           </Pressable>
-        )}
-      />
+        ))}
+      </ScrollView>
       {count > 1 && (
         <View style={styles.dots}>
           {banners!.map((b, i) => (

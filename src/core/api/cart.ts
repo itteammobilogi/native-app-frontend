@@ -66,17 +66,22 @@ export type AddPayload = {
 
 export const addToCart = (p: AddPayload) =>
   api
-    .post<{ success: boolean; message: string; t_id: number }>('/api/products/cart/member/addproduct', {
+    .post<{ success: boolean; message: string; t_id: number; select_pending?: boolean }>('/api/products/cart/member/addproduct', {
       ...p,
       utm_source: 'app',
     })
     .then((r) => r.data);
 
+// Both answer with select_pending: whether the seller is being re-quoted.
+type ChangeResult = { success: boolean; message?: string; t_id: number; select_pending?: boolean };
+
 export const updateQty = (p: { item_id: number; guest_id: string } & ({ quantity: number } | { increment_by: number })) =>
-  api.post('/api/products/cart/update-qty', p).then((r) => r.data);
+  api.post<ChangeResult & { quantity: number }>('/api/products/cart/update-qty', p).then((r) => r.data);
 
 export const removeFromCart = (itemId: number, transactionId: number, guest_id: string) =>
-  api.post('/api/products/cart/remove/cart', { itemId, transactionId, guest_id }).then((r) => r.data);
+  api
+    .post<ChangeResult & { items_left: number }>('/api/products/cart/remove/cart', { itemId, transactionId, guest_id })
+    .then((r) => r.data);
 
 export const clearCart = (guest_id: string) =>
   api.post('/api/products/cart/clear/cart', { guest_id }).then((r) => r.data);
@@ -97,16 +102,21 @@ export const webhookStatus = (t_ids: number[], endpoint: 'on_select' | 'on_init'
     .post<{ results: WebhookResult[] }>('/api/products/cart/webhook-status', { t_ids, endpoint })
     .then((r) => r.data.results ?? []);
 
-// Polls until every seller has answered (or we give up). Mirrors the website's
-// useSelectWait (2.5s × 20s for select) and checkout (5s × 60s for init).
+// Polls until every seller has answered (or we give up), with the website's
+// timeouts (20 s for select, 60 s for init). The website polls every 2.5 s /
+// 5 s, so an answer that lands at 1 s still waits the full interval; the
+// status check is a cheap DB read, so poll sooner: first after 1 s, then every
+// 1.5 s.
 export async function waitForSellers(
   t_ids: number[],
   endpoint: 'on_select' | 'on_init',
-  { interval = endpoint === 'on_init' ? 5000 : 2500, timeout = endpoint === 'on_init' ? 60000 : 20000, since = 0 } = {},
+  { first = 1000, interval = 1500, timeout = endpoint === 'on_init' ? 60000 : 20000, since = 0 } = {},
 ) {
   const started = Date.now();
+  let delay = first;
   while (Date.now() - started < timeout) {
-    await new Promise((r) => setTimeout(r, interval));
+    await new Promise((r) => setTimeout(r, delay));
+    delay = interval;
     try {
       const results = (await webhookStatus(t_ids, endpoint)).filter(
         // Ignore answers to an earlier round (e.g. after changing address).

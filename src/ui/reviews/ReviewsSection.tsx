@@ -44,7 +44,9 @@ export function ReviewsSection({
   const [writeOpen, setWriteOpen] = useState(false);
   const [viewer, setViewer] = useState<number | null>(null);
 
-  const gallery = useAsync(() => getProductReviews(productId, { limit: GALLERY_LIMIT, sort: 'recent' }), [productId]);
+  const gallery = useAsync(() => getProductReviews(productId, { limit: GALLERY_LIMIT, sort: 'recent' }), [productId], {
+    key: 'product:review-gallery',
+  });
   const mine = useAsync(() => (isLoggedIn ? getMyReview(productId) : Promise.resolve(null)), [productId, user?.id]);
 
   const summary = top?.summary;

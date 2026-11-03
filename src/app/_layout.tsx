@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from 'react';
 
 import { AuthProvider, useAuth } from '@/core/auth/AuthContext';
 import { CartProvider } from '@/core/cart/CartContext';
+import { AddressPincodeSync } from '@/core/location/AddressPincodeSync';
 import { LocationProvider } from '@/core/location/LocationContext';
 import { PushSync } from '@/core/PushSync';
 import { SavedProvider } from '@/core/saved/SavedContext';
@@ -32,6 +33,7 @@ export default function RootLayout() {
             <CartProvider>
               <SavedProvider>
                 <PushSync canPrompt={introDone} />
+                <AddressPincodeSync />
                 <IntroGate.Provider value={revealed || introDone}>
                   <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: 'transparent' } }}>
                     <Stack.Screen name="(tabs)" />

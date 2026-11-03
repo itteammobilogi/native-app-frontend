@@ -26,7 +26,7 @@ import { useToast } from '@/ui/Toast';
 type Step = 'idle' | 'billing' | 'seller' | 'payment';
 const STEP_TEXT: Record<Step, string> = {
   idle: '',
-  billing: 'Saving delivery details…',
+  billing: 'Confirming delivery to your address…',
   seller: 'Waiting for the seller to confirm your order…',
   payment: 'Preparing secure payment…',
 };

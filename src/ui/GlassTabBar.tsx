@@ -1,43 +1,27 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { router, type Href } from 'expo-router';
 import type { BottomTabBarProps } from 'expo-router/js-tabs';
-import { LinearGradient } from 'expo-linear-gradient';
-import { useEffect, useRef, useState } from 'react';
-import { Platform, Pressable, StyleSheet, View } from 'react-native';
-import Animated, { useAnimatedStyle, useSharedValue, withSpring } from 'react-native-reanimated';
+import { Pressable, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets, type EdgeInsets } from 'react-native-safe-area-context';
 
 import { useCart } from '@/core/cart/CartContext';
 import { tap } from './Button';
-import { Glass } from './Glass';
 import { Text } from './Text';
-import { radius, TAB_BAR_HEIGHT, usePalette } from './theme';
+import { TAB_BAR_HEIGHT, usePalette } from './theme';
 
+// Same icons as the website's mobile bottom nav (lucide Home, LayoutGrid,
+// ShoppingCart, User).
 const ICONS: Record<string, [keyof typeof Ionicons.glyphMap, keyof typeof Ionicons.glyphMap]> = {
   index: ['home', 'home-outline'],
   categories: ['grid', 'grid-outline'],
-  cart: ['bag-handle', 'bag-handle-outline'],
-  account: ['person-circle', 'person-circle-outline'],
+  cart: ['cart', 'cart-outline'],
+  account: ['person', 'person-outline'],
 };
 
-const PAD = 6;
-const PILL_W = 56;
-const PILL_H = 32;
-const GAP = 3;
-const LABEL_H = 14;
-const ITEM_H = PILL_H + GAP + LABEL_H;
-const DOCKED_H = 60;
-
-// Android's 3-button navigation bar is 48dp tall; the gesture handle is about
-// half that. With buttons, a floating pill would hover awkwardly above them,
-// so the bar docks full width and its solid fill runs down behind the system
-// buttons, the way Instagram's does.
-const usesButtonNav = (bottomInset: number) => Platform.OS === 'android' && bottomInset >= 40;
-
-// Height the bar covers above the bottom safe-area inset, so pages can pad
-// their content clear of it.
-export function tabBarSpace(bottomInset: number) {
-  return usesButtonNav(bottomInset) ? DOCKED_H : Math.max(bottomInset, 12) - bottomInset + TAB_BAR_HEIGHT;
+// The bar is docked to the screen bottom and its fill runs down behind the
+// system navigation, so it covers TAB_BAR_HEIGHT above the bottom inset.
+export function tabBarSpace(_bottomInset: number) {
+  return TAB_BAR_HEIGHT;
 }
 
 // Safe-area insets for a page that shows PageTabBar (via Screen's `tabBar`):
@@ -91,9 +75,8 @@ export function PageTabBar({ active }: { active: TabName }) {
   );
 }
 
-// Floating frosted tab bar (docked full width on 3-button Android phones).
-// Every tab gets the same width (icon over label), so nothing shifts when the
-// selection changes; a gradient pill slides under the active icon.
+// Matches the website's mobile bottom nav: a solid bar docked full width with
+// a soft upward shadow; the active tab turns brand blue with a filled icon.
 function TabBar({
   tabs,
   index: activeIndex,
@@ -107,110 +90,81 @@ function TabBar({
 }) {
   const t = usePalette();
   const { count } = useCart();
-  const [bar, setBar] = useState({ width: 0, height: 0 });
-  const itemWidth = bar.width ? (bar.width - PAD * 2) / tabs.length : 0;
-  const docked = usesButtonNav(insets.bottom);
-  const dockedFill = t.dark ? '#0B1230' : '#FFFFFF';
-
-  // The pill jumps into place on first layout and slides on later changes.
-  const x = useSharedValue(0);
-  const placed = useRef(false);
-  useEffect(() => {
-    if (!itemWidth) return;
-    const to = PAD + activeIndex * itemWidth + (itemWidth - PILL_W) / 2;
-    x.value = placed.current ? withSpring(to, { damping: 18, stiffness: 220 }) : to;
-    placed.current = true;
-  }, [activeIndex, itemWidth, x]);
-  const pillStyle = useAnimatedStyle(() => ({ transform: [{ translateX: x.value }] }));
-
-  const row = (
-    <View style={styles.row} onLayout={(e) => setBar(e.nativeEvent.layout)}>
-      {!!itemWidth && activeIndex >= 0 && (
-        // Same vertical spot as each item's icon box in its centred icon-over-label column.
-        <Animated.View style={[styles.pill, { top: (bar.height - ITEM_H) / 2 }, pillStyle]}>
-          <LinearGradient colors={t.primaryGradient} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={StyleSheet.absoluteFill} />
-        </Animated.View>
-      )}
-      {tabs.map((tab, index) => {
-        const focused = activeIndex === index;
-        const [on, off] = ICONS[tab.name] ?? ['ellipse', 'ellipse-outline'];
-
-        return (
-          <Pressable
-            key={tab.key}
-            accessibilityRole="tab"
-            accessibilityState={{ selected: focused }}
-            accessibilityLabel={tab.label}
-            style={styles.item}
-            onPress={() => {
-              tap();
-              onSelect(index);
-            }}>
-            <View style={styles.icon}>
-              <Ionicons name={focused ? on : off} size={22} color={focused ? '#fff' : t.textMuted} />
-              {tab.name === 'cart' && count > 0 && (
-                <View style={[styles.badge, { backgroundColor: t.danger, borderColor: docked ? dockedFill : t.glassStrong }]}>
-                  <Text variant="tiny" tone="onPrimary" style={{ fontSize: 10 }}>
-                    {count > 99 ? '99+' : count}
-                  </Text>
-                </View>
-              )}
-            </View>
-            <Text
-              variant="tiny"
-              numberOfLines={1}
-              style={[styles.label, { color: focused ? t.primary : t.textMuted, fontWeight: focused ? '700' : '500' }]}>
-              {tab.label}
-            </Text>
-          </Pressable>
-        );
-      })}
-    </View>
-  );
-
-  if (docked) {
-    return (
-      <View style={[styles.docked, { paddingBottom: insets.bottom, backgroundColor: dockedFill, borderTopColor: t.hairline }]}>
-        <View style={{ height: DOCKED_H }}>{row}</View>
-      </View>
-    );
-  }
+  const fill = t.dark ? '#0B1230' : '#FFFFFF';
+  const inactive = t.dark ? t.textMuted : '#9CA3AF'; // website: text-gray-400
 
   return (
-    <View style={[styles.wrap, { bottom: Math.max(insets.bottom, 12) }]} pointerEvents="box-none">
-      <Glass strong radius={radius.xl} intensity={70} style={styles.bar}>
-        {row}
-      </Glass>
+    <View style={[styles.bar, { paddingBottom: insets.bottom, backgroundColor: fill, borderTopColor: t.hairline }]}>
+      <View style={styles.row}>
+        {tabs.map((tab, index) => {
+          const focused = activeIndex === index;
+          const [on, off] = ICONS[tab.name] ?? ['ellipse', 'ellipse-outline'];
+          const color = focused ? t.primary : inactive;
+
+          return (
+            <Pressable
+              key={tab.key}
+              accessibilityRole="tab"
+              accessibilityState={{ selected: focused }}
+              accessibilityLabel={tab.label}
+              style={styles.item}
+              onPress={() => {
+                tap();
+                onSelect(index);
+              }}>
+              {focused && <View style={[styles.indicator, { backgroundColor: t.primary }]} />}
+              <View>
+                <Ionicons name={focused ? on : off} size={24} color={color} />
+                {tab.name === 'cart' && count > 0 && (
+                  <View style={[styles.badge, { borderColor: fill }]}>
+                    <Text variant="tiny" tone="onPrimary" style={{ fontSize: 10, lineHeight: 12 }}>
+                      {count > 99 ? '99+' : count}
+                    </Text>
+                  </View>
+                )}
+              </View>
+              <Text variant="tiny" numberOfLines={1} style={[styles.label, { color, fontWeight: focused ? '700' : '500' }]}>
+                {tab.label}
+              </Text>
+            </Pressable>
+          );
+        })}
+      </View>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  wrap: { position: 'absolute', left: 16, right: 16 },
-  bar: { height: TAB_BAR_HEIGHT },
   // Pinned to the screen bottom; the padding fills in behind the system buttons.
-  docked: { position: 'absolute', left: 0, right: 0, bottom: 0, borderTopWidth: StyleSheet.hairlineWidth },
-  row: { flex: 1, flexDirection: 'row', alignItems: 'center', paddingHorizontal: PAD },
-  item: { flex: 1, height: '100%', alignItems: 'center', justifyContent: 'center', gap: GAP },
-  icon: { width: PILL_W, height: PILL_H, alignItems: 'center', justifyContent: 'center' },
-  pill: {
+  bar: {
     position: 'absolute',
     left: 0,
-    width: PILL_W,
-    height: PILL_H,
-    borderRadius: PILL_H / 2,
-    overflow: 'hidden',
+    right: 0,
+    bottom: 0,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    // The website's soft upward shadow. Not a blurred boxShadow: the bar sits
+    // over scrolling content, and Android redraws that blur every frame,
+    // which made scrolling stutter. Elevation is drawn by the system for free.
+    elevation: 12,
+    shadowColor: '#000',
+    shadowOpacity: 0.08,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: -4 },
   },
-  label: { fontSize: 11, lineHeight: LABEL_H },
+  row: { height: TAB_BAR_HEIGHT, flexDirection: 'row', alignItems: 'stretch', paddingHorizontal: 8 },
+  item: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 3 },
+  indicator: { position: 'absolute', top: 0, width: 28, height: 3, borderBottomLeftRadius: 3, borderBottomRightRadius: 3 },
+  label: { fontSize: 11, lineHeight: 14 },
   badge: {
     position: 'absolute',
-    top: -4,
-    right: 6,
+    top: -5,
+    right: -10,
     minWidth: 18,
     height: 18,
     borderRadius: 9,
     paddingHorizontal: 4,
     borderWidth: 2,
+    backgroundColor: '#DB2777', // website: bg-pink-600
     alignItems: 'center',
     justifyContent: 'center',
   },

@@ -4,7 +4,7 @@ import { ScrollView, View } from 'react-native';
 
 import { DOMAIN_META, getSubcategories, listProducts, type Sort } from '@/core/api/catalog';
 import { SERVER_SORTS, type Filters } from '@/core/filters';
-import { useAsync, usePaged } from '@/core/hooks/useAsync';
+import { FIVE_MIN, useAsync, usePaged } from '@/core/hooks/useAsync';
 import { IconButton } from '@/ui/Button';
 import { Chip } from '@/ui/Chip';
 import { FilterBar, FilterSheet } from '@/ui/FilterSheet';
@@ -16,7 +16,7 @@ export default function ShopScreen() {
   const [filters, setFilters] = useState<Filters>({ sort: 'created_desc', category: initialSub });
   const [filterOpen, setFilterOpen] = useState(false);
 
-  const subs = useAsync(() => getSubcategories(domain), [domain]);
+  const subs = useAsync(() => getSubcategories(domain), [domain], { key: 'shop:subcategories', staleTime: FIVE_MIN });
   const categories = (subs.data ?? []).map((s) => ({ value: s.slug, label: s.category_name }));
 
   const list = usePaged(
@@ -31,6 +31,7 @@ export default function ShopScreen() {
         page,
       }),
     [domain, filters],
+    { key: 'shop:products' },
   );
 
   const title = DOMAIN_META[domain]?.name ?? domain?.replace(/-/g, ' ');
