@@ -105,12 +105,12 @@ export const webhookStatus = (t_ids: number[], endpoint: 'on_select' | 'on_init'
 // Polls until every seller has answered (or we give up), with the website's
 // timeouts (20 s for select, 60 s for init). The website polls every 2.5 s /
 // 5 s, so an answer that lands at 1 s still waits the full interval; the
-// status check is a cheap DB read, so poll sooner: first after 1 s, then every
-// 1.5 s.
+// status check is one small DB read (~0.6 s on the server), so poll sooner:
+// first after 0.7 s, then every second.
 export async function waitForSellers(
   t_ids: number[],
   endpoint: 'on_select' | 'on_init',
-  { first = 1000, interval = 1500, timeout = endpoint === 'on_init' ? 60000 : 20000, since = 0 } = {},
+  { first = 700, interval = 1000, timeout = endpoint === 'on_init' ? 60000 : 20000, since = 0 } = {},
 ) {
   const started = Date.now();
   let delay = first;

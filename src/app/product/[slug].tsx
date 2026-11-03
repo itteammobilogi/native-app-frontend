@@ -7,19 +7,24 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import {
   getProduct,
-  listProducts,
   plainText,
   productGallery,
   variantUnavailable,
   type ProductSummary,
   type Variant,
 } from '@/core/api/catalog';
-import { getProductReviews } from '@/core/api/reviews';
 import { useCart } from '@/core/cart/CartContext';
 import { attributeLabel, colourNameMap, swatchHex } from '@/core/colourNames';
 import { WEBSITE_URL } from '@/core/config';
 import { useAsync } from '@/core/hooks/useAsync';
-import { PRODUCT_CACHE, productPreview } from '@/core/productPreview';
+import {
+  getRelated,
+  getTopReviews,
+  PRODUCT_CACHE,
+  productPreview,
+  RELATED_CACHE,
+  TOP_REVIEWS_CACHE,
+} from '@/core/productPreview';
 import { useLocation } from '@/core/location/LocationContext';
 import { useSaved } from '@/core/saved/SavedContext';
 import { Button, IconButton, tap } from '@/ui/Button';
@@ -51,29 +56,25 @@ export default function ProductScreen() {
   const p = product.data;
   // The tapped card's name, image and price, shown while the details load.
   const preview = productPreview(slug);
+  // Reviews and related products don't wait for the details: the tapped
+  // card has the group id, domain and subcategory too, and openingProduct
+  // already started these with the same deps.
+  const groupId = p?.id ?? preview?.id;
+  const domain = p?.category ?? preview?.domain_slug ?? null;
+  const subcategory = p?.subcategory ?? preview?.category_slug ?? null;
   // Reviews are keyed by the product group id; first page sorted by
   // "helpful" feeds both the rating pill and the Top reviews list.
   const reviews = useAsync(
-    () => (p ? getProductReviews(p.id, { limit: 2, sort: 'helpful' }) : Promise.resolve(undefined)),
-    [p?.id],
-    { key: 'product:top-reviews' },
+    () => (groupId ? getTopReviews(groupId) : Promise.resolve(undefined)),
+    [groupId],
+    TOP_REVIEWS_CACHE,
   );
   const rating = reviews.data?.summary;
-  const related = useAsync(
-    () =>
-      p?.category
-        ? listProducts({ domain: p.category, subcategory: p.subcategory ?? undefined, available_only: 1, limit: 12 }).then((r) =>
-            r.items.filter((x) => x.slug !== slug),
-          )
-        : Promise.resolve([]),
-    [p?.category, p?.subcategory, slug],
-    { key: 'product:related' },
-  );
+  const related = useAsync(() => getRelated(domain, subcategory, slug), [domain, subcategory, slug], RELATED_CACHE);
 
   const [variantId, setVariantId] = useState<number | null>(null);
   const [qty, setQty] = useState(1);
   const [imgIndex, setImgIndex] = useState(0);
-  const [adding, setAdding] = useState<'cart' | 'buy' | null>(null);
   const [showFullDesc, setShowFullDesc] = useState(false);
 
   const variant = useMemo(() => {
@@ -114,7 +115,7 @@ export default function ProductScreen() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [p?.id, addRecent]);
 
-  const addToCart = async (mode: 'cart' | 'buy') => {
+  const addToCart = (mode: 'cart' | 'buy') => {
     if (!p || !variant) return;
     // Buy now on something already in the cart goes straight to it. Adding
     // again would change the quantity, which makes the seller re-quote (6-8 s
@@ -123,28 +124,29 @@ export default function ProductScreen() {
       router.push('/cart');
       return;
     }
-    setAdding(mode);
-    try {
-      // ONDC ids come from the product (seller) and the variant (item/location).
-      await cart.add({
-        product_variant_id: variant.id,
-        product_value: variant.product_value,
-        bpp_id: p.bpp_id,
-        sor_id: p.sor_id,
-        sor_value: p.sor_value,
-        location_id: variant.location_id,
-        location_value: variant.location_value,
-        quantity: qty,
-        price: Number(variant.price),
-        pincode_id: pincodeId,
-      });
-      if (mode === 'buy') router.push('/cart');
-      else toast('Added to cart', 'success');
-    } catch (e: any) {
-      toast(e?.message ?? 'Could not add to cart', 'error');
-    } finally {
-      setAdding(null);
-    }
+    // The line shows in the cart at once (cart.add's `show`), so nothing here
+    // waits for the server: Buy now opens the cart straight away and the
+    // toast is immediate. A failure takes the line back out and says so.
+    // ONDC ids come from the product (seller) and the variant (item/location).
+    cart
+      .add(
+        {
+          product_variant_id: variant.id,
+          product_value: variant.product_value,
+          bpp_id: p.bpp_id,
+          sor_id: p.sor_id,
+          sor_value: p.sor_value,
+          location_id: variant.location_id,
+          location_value: variant.location_value,
+          quantity: qty,
+          price: Number(variant.price),
+          pincode_id: pincodeId,
+        },
+        { title: p.name, image: gallery[0] ?? null, slug, variant_attributes: variant.variant_attributes },
+      )
+      .catch((e: any) => toast(e?.message ?? 'Could not add to cart', 'error'));
+    if (mode === 'buy') router.push('/cart');
+    else toast('Added to cart', 'success');
   };
 
   if (product.error) {
@@ -398,16 +400,14 @@ export default function ProductScreen() {
             icon="bag-add-outline"
             variant="glass"
             onPress={() => addToCart('cart')}
-            loading={adding === 'cart'}
-            disabled={unavailable || !!adding}
+            disabled={unavailable}
             style={{ flex: 1 }}
           />
           <Button
             title="Buy now"
             icon="flash"
             onPress={() => addToCart('buy')}
-            loading={adding === 'buy'}
-            disabled={unavailable || !!adding}
+            disabled={unavailable}
             style={{ flex: 1 }}
           />
         </Glass>

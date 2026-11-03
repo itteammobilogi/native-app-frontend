@@ -23,12 +23,16 @@ type CartState = {
   loading: boolean;
   confirming: boolean; // waiting for sellers to confirm prices after a change
   refresh: () => Promise<Cart>;
-  add: (p: Omit<AddPayload, 'guest_id'>) => Promise<void>;
+  // `show`: how the line looks, so it is in the cart (and the badge) the
+  // moment it's added rather than after the add and a cart read (~1.5 s).
+  add: (p: Omit<AddPayload, 'guest_id'>, show?: LineDisplay) => Promise<void>;
   has: (variantId: number) => boolean;
   setQuantity: (line: CartLine, quantity: number) => Promise<void>;
   remove: (line: CartLine) => Promise<void>;
   clear: () => Promise<void>;
 };
+
+export type LineDisplay = Pick<CartLine, 'title' | 'image' | 'slug' | 'variant_attributes'>;
 
 const Ctx = createContext<CartState | null>(null);
 
@@ -75,6 +79,10 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
   // line (or the old quantity) back on screen.
   const version = useRef(0);
   const settling = useRef(0);
+  // New lines shown before the server has them (negative ids). Each goes when
+  // a cart read that has its variant lands, or once its add has settled.
+  const [pending, setPending] = useState<CartLine[]>([]);
+  const adding = useRef(new Map<number, Promise<void>>());
   // The cart as last shown, for add() to see whether a line already exists.
   const cartRef = useRef(cart);
   useEffect(() => {
@@ -87,7 +95,12 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
     const v = ++version.current;
     try {
       const next = await getCart(await gid());
-      if (v === version.current) setCart(next);
+      if (v === version.current) {
+        setCart(next);
+        setPending((l) =>
+          l.length ? l.filter((x) => !next.products.some((c) => c.product_variant_id === x.product_variant_id)) : l,
+        );
+      }
       return next;
     } finally {
       setLoading(false);
@@ -98,25 +111,37 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
   // started while the write was on its way) are now out of date.
   const invalidate = () => void ++version.current;
 
+  // While anything is in flight the cart says "Confirming prices" and
+  // checkout waits; overlapping changes each hold it until the last is done.
+  const hold = () => {
+    settling.current += 1;
+    setConfirming(true);
+  };
+  const release = () => {
+    settling.current -= 1;
+    if (!settling.current) setConfirming(false);
+  };
+
   // After a change the server re-quotes with the seller (ONDC /select)
-  // asynchronously; poll until they answer, then show the confirmed prices.
-  // Skipped when the server says no re-quote is pending (e.g. the seller's
-  // last line was removed), which used to hold "Confirming prices" and keep
-  // checkout disabled for the full 20 s timeout.
+  // asynchronously; poll until they answer. Skipped when the server says no
+  // re-quote is pending (e.g. the seller's last line was removed). The cart
+  // read and the polling run side by side, and the banner goes as soon as the
+  // seller has answered; the confirmed prices are read after that. Run one
+  // after another these added ~2 s to every change.
   const settle = useCallback(
-    async (t_ids: number[], selectPending = true) => {
-      await refresh();
-      if (!t_ids.length || !selectPending) return;
-      settling.current += 1;
-      setConfirming(true);
+    async (t_ids: number[], selectPending = true, done?: () => void) => {
+      const polling = t_ids.length > 0 && selectPending;
+      if (polling) hold();
       try {
-        await waitForSellers(t_ids, 'on_select');
-        await refresh();
+        const wait = polling ? waitForSellers(t_ids, 'on_select') : null;
+        await refresh().catch(() => {});
+        if (!wait) return;
+        await wait;
       } finally {
-        // Overlapping changes each settle; the banner stays until the last.
-        settling.current -= 1;
-        if (!settling.current) setConfirming(false);
+        if (polling) release();
+        done?.();
       }
+      refresh().catch(() => {});
     },
     [refresh],
   );
@@ -161,35 +186,69 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
   );
 
   const add = useCallback<CartState['add']>(
-    async (p) => {
+    async (p, show) => {
       const guest_id = await gid();
+      // Added a moment ago and still on its way: let that land, then this
+      // becomes a quantity change on its line.
+      await adding.current.get(p.product_variant_id)?.catch(() => {});
       // Already in the cart: the server would answer 409 and we'd read the
       // cart to find the line, three round trips in a row before anything
       // changed on screen. Go straight to the quantity update instead.
       const existing = cartRef.current.products.find((l) => l.product_variant_id === p.product_variant_id);
       if (existing) return bump(existing, p.quantity, guest_id);
 
-      invalidate();
-      try {
-        const res = await addToCart({ ...p, guest_id });
+      const tempId = -p.product_variant_id;
+      const drop = () => setPending((l) => l.filter((x) => x.id !== tempId));
+      if (show) {
+        const line: CartLine = {
+          ...show,
+          id: tempId,
+          t_id: 0,
+          product_variant_id: p.product_variant_id,
+          unit_price: p.price,
+          quantity: p.quantity,
+          price: p.price * p.quantity,
+          is_unavailable: false,
+          quote_state: 'awaiting',
+        };
+        setPending((l) => [...l.filter((x) => x.id !== tempId), line]);
+      }
+      const task = (async () => {
+        hold();
         invalidate();
-        settle([res.t_id], res.select_pending !== false).catch(() => {});
-      } catch (e: any) {
-        // In this seller's transaction but not in the cart we last read
-        // (added from another device, say) → bump the quantity instead.
-        if (e?.response?.status === 409 && e.response.data?.t_id && !e.response.data?.code) {
-          const current = await refresh();
-          const line = current.products.find((l) => l.product_variant_id === p.product_variant_id);
-          if (line) return bump(line, p.quantity, guest_id);
+        try {
+          const res = await addToCart({ ...p, guest_id });
+          invalidate();
+          settle([res.t_id], res.select_pending !== false, drop).catch(() => {});
+        } catch (e: any) {
+          drop();
+          // In this seller's transaction but not in the cart we last read
+          // (added from another device, say) → bump the quantity instead.
+          if (e?.response?.status === 409 && e.response.data?.t_id && !e.response.data?.code) {
+            const current = await refresh();
+            const line = current.products.find((l) => l.product_variant_id === p.product_variant_id);
+            if (line) return bump(line, p.quantity, guest_id);
+          }
+          throw new Error(cartError(e).message);
+        } finally {
+          release();
         }
-        throw new Error(cartError(e).message);
+      })();
+      adding.current.set(p.product_variant_id, task);
+      try {
+        await task;
+      } finally {
+        if (adding.current.get(p.product_variant_id) === task) adding.current.delete(p.product_variant_id);
       }
     },
     [gid, refresh, settle, bump],
   );
 
   // Whether this variant is already a line in the cart.
-  const has = useCallback((variantId: number) => cart.products.some((l) => l.product_variant_id === variantId), [cart]);
+  const has = useCallback(
+    (variantId: number) => [...cart.products, ...pending].some((l) => l.product_variant_id === variantId),
+    [cart, pending],
+  );
 
   const setQuantity = useCallback<CartState['setQuantity']>(
     async (line, quantity) => {
@@ -238,13 +297,20 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
     await clearCart(await gid());
     invalidate();
     setCart(EMPTY_CART);
+    setPending([]);
   }, [gid]);
 
-  const count = useMemo(() => cart.products.reduce((n, l) => n + Number(l.quantity || 0), 0), [cart]);
+  // The server's cart plus lines still being added.
+  const shown = useMemo(() => {
+    const extra = pending.filter((x) => !cart.products.some((c) => c.product_variant_id === x.product_variant_id));
+    return extra.length ? withLines(cart, [...cart.products, ...extra]) : cart;
+  }, [cart, pending]);
+
+  const count = useMemo(() => shown.products.reduce((n, l) => n + Number(l.quantity || 0), 0), [shown]);
 
   const value = useMemo(
-    () => ({ cart, count, loading, confirming, refresh, add, has, setQuantity, remove, clear }),
-    [cart, count, loading, confirming, refresh, add, has, setQuantity, remove, clear],
+    () => ({ cart: shown, count, loading, confirming, refresh, add, has, setQuantity, remove, clear }),
+    [shown, count, loading, confirming, refresh, add, has, setQuantity, remove, clear],
   );
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }

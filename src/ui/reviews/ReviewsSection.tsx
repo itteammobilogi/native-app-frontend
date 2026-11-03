@@ -4,10 +4,11 @@ import { router } from 'expo-router';
 import { useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
 
-import { getMyReview, getProductReviews, reviewImageUrl, type ReviewsPage, type ReviewSummary } from '@/core/api/reviews';
+import { getMyReview, reviewImageUrl, type ReviewsPage, type ReviewSummary } from '@/core/api/reviews';
 import { useAuth } from '@/core/auth/AuthContext';
 import { useAsync } from '@/core/hooks/useAsync';
 import { useReviewVotes } from '@/core/hooks/useReviewVotes';
+import { getReviewGallery, REVIEW_GALLERY_CACHE } from '@/core/productPreview';
 import { Button, tap } from '@/ui/Button';
 import { Glass } from '@/ui/Glass';
 import { Skeleton } from '@/ui/Skeleton';
@@ -18,8 +19,6 @@ import { ImageViewer } from './ImageViewer';
 import { ReviewCard } from './ReviewCard';
 import { StarRating } from './StarRating';
 import { WriteReviewSheet } from './WriteReviewSheet';
-
-const GALLERY_LIMIT = 24;
 
 // Mirrors the website's components/reviews/ReviewsSection: summary +
 // histogram, write/edit, moderation banner, "Customers say", photo strip,
@@ -44,9 +43,8 @@ export function ReviewsSection({
   const [writeOpen, setWriteOpen] = useState(false);
   const [viewer, setViewer] = useState<number | null>(null);
 
-  const gallery = useAsync(() => getProductReviews(productId, { limit: GALLERY_LIMIT, sort: 'recent' }), [productId], {
-    key: 'product:review-gallery',
-  });
+  // Started on press-in with the rest of the page (openingProduct).
+  const gallery = useAsync(() => getReviewGallery(productId), [productId], REVIEW_GALLERY_CACHE);
   const mine = useAsync(() => (isLoggedIn ? getMyReview(productId) : Promise.resolve(null)), [productId, user?.id]);
 
   const summary = top?.summary;

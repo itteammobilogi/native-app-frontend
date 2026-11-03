@@ -208,7 +208,7 @@ function CartRow({ line, onChange }: { line: CartLine; onChange: (q: number) => 
               </Text>
             )}
           </View>
-          <QtyStepper small removable value={line.quantity} max={max} onChange={onChange} disabled={line.is_unavailable && line.quantity <= 0} />
+          <QtyStepper small removable value={line.quantity} max={max} onChange={onChange} disabled={(line.is_unavailable && line.quantity <= 0) || line.id < 0} />
         </View>
       </View>
     </Glass>

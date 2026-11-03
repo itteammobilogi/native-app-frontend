@@ -1,7 +1,8 @@
+import { isAxiosError } from 'axios';
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 
 import { errorMessage } from '@/core/api/client';
-import { fetchShared, isFresh, peek, put, readPersisted } from '@/core/cache';
+import { fetchShared, forget, isFresh, peek, put, readPersisted } from '@/core/cache';
 
 // Keep the latest loader in a ref without touching refs during render.
 function useLatest<T>(value: T) {
@@ -27,6 +28,10 @@ export const FIVE_MIN = 5 * 60_000;
 // Home and the Categories tab share the domain list.
 export const DOMAINS_CACHE: CacheOptions = { key: 'domains', persist: true, staleTime: 10 * 60_000 };
 const cacheKeyOf = (cache: CacheOptions | undefined, key: string) => (cache ? `${cache.key}:${key}` : null);
+
+// 404 / 410: the thing itself is gone (a product removed or retired by the
+// admin), not a failed request, so the cached copy must not keep showing.
+const isGone = (e: unknown) => isAxiosError(e) && (e.response?.status === 404 || e.response?.status === 410);
 
 // Starts a cached load early (e.g. on press-in). A useAsync with the same
 // cache options and deps then picks up the running request or its answer.
@@ -60,9 +65,16 @@ export function useAsync<T>(fn: () => Promise<T>, deps: unknown[], cache?: Cache
         const data = ck ? await fetchShared(ck, () => fnRef.current(), persist) : await fnRef.current();
         if (id === seq.current) setState({ key: k, data, error: null });
       } catch (e) {
-        // A failed refresh of cached data keeps showing that data.
+        // A failed refresh of cached data keeps showing that data, unless the
+        // server said it no longer exists: then the copy goes too.
+        const gone = isGone(e);
+        if (gone && ck) forget(ck);
         if (id === seq.current)
-          setState((s) => (ck && s.key === k && s.data !== undefined ? s : { key: k, data: s.data, error: errorMessage(e) }));
+          setState((s) =>
+            ck && !gone && s.key === k && s.data !== undefined
+              ? s
+              : { key: k, data: gone ? undefined : s.data, error: errorMessage(e) },
+          );
       } finally {
         if (id === seq.current) setRefreshing(false);
       }

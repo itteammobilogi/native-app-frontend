@@ -36,6 +36,12 @@ export function put<T>(key: string, data: T, persist = false) {
   if (persist) writeJson(fileName(key), { key, ...entry });
 }
 
+// Drops an entry (memory and disk), e.g. a product the server says is gone.
+export function forget(key: string) {
+  mem.delete(key);
+  writeJson(fileName(key), null);
+}
+
 // One request per key at a time: two screens (or a re-render) asking for the
 // same thing share the answer. The result is cached on success.
 export function fetchShared<T>(key: string, load: () => Promise<T>, persist = false): Promise<T> {

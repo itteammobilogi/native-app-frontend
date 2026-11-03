@@ -19,6 +19,7 @@ export type ProductSummary = {
   brand_name?: string | null;
   category_name?: string | null;
   domain_slug?: string | null;
+  category_slug?: string | null; // the subcategory (ProductDetail.subcategory)
   is_assured?: 0 | 1;
 };
 
@@ -142,13 +143,15 @@ export type Sort = 'created_desc' | 'price_asc' | 'price_desc';
 
 export type ListParams = {
   domain?: string;
-  subcategory?: string;
+  category?: string; // subcategory slug, as the website's recommendation strips send it
+  subcategory?: string; // subcategory slug, as the website's shop page sends it
+  status?: 'all';
   sort?: Sort;
   page?: number;
   limit?: number;
   min?: number;
   max?: number;
-  in_stock?: 1;
+  in_stock?: 0 | 1;
   available_only?: 1;
   is_featured?: 1;
   is_exclusive_deals?: 1;
@@ -157,9 +160,38 @@ export type ListParams = {
 
 export type Page<T> = { items: T[]; page: number; hasMore: boolean; total: number };
 
-export async function listProducts(params: ListParams): Promise<Page<ProductSummary>> {
-  const clean = Object.fromEntries(Object.entries(params).filter(([, v]) => v !== undefined && v !== ''));
-  const { data } = await api.get('/api/products/list-products', { params: { limit: 24, ...clean } });
+// The backend caches listings in Redis under JSON.stringify(req.query), so a
+// query only hits that cache when its parameters, values AND order match one
+// already asked. Website traffic keeps its own queries warm (~1 s); any other
+// spelling of the same query misses and takes 10-13 s. So these are built
+// exactly like the website's listProducts / listShopSubcategoryProducts
+// (utils/ApiUrlHelper.js): same key order, same defaults (page 1, limit 24,
+// created_desc), and the same domain normalisation. Keep the order below in
+// step with it.
+function listQuery(p: ListParams) {
+  const domain = String(p.domain ?? '').trim().toLowerCase();
+  const ordered: Record<string, unknown> = {
+    domain: domain === 'grocery-foods' ? 'grocery' : domain,
+    page: p.page ?? 1,
+    limit: p.limit ?? 24,
+    sort: p.sort ?? 'created_desc',
+    min: p.min,
+    max: p.max,
+    category: p.category,
+    subcategory: p.subcategory,
+    status: p.status,
+    in_stock: p.in_stock,
+    available_only: p.available_only,
+    name: p.name,
+    is_exclusive_deals: p.is_exclusive_deals,
+    is_featured: p.is_featured,
+  };
+  return Object.fromEntries(Object.entries(ordered).filter(([, v]) => v !== undefined && v !== null && v !== ''));
+}
+
+async function listFrom(path: string, p: ListParams): Promise<Page<ProductSummary>> {
+  const params = listQuery(p);
+  const { data } = await api.get(path, { params });
   const page = Number(data?.page ?? params.page ?? 1);
   const totalPages = Number(data?.totalPages ?? 1);
   return {
@@ -170,11 +202,24 @@ export async function listProducts(params: ListParams): Promise<Page<ProductSumm
   };
 }
 
-// Same fallback as the website's Deals of the Day strip.
+// Rails, related products, deals and "See all" lists.
+export const listProducts = (p: ListParams) => listFrom('/api/products/list-products', p);
+
+// A category or subcategory's listing: the endpoint the website's shop pages
+// use (components/shop/SubCategory.js), so it shares their warm cache. It
+// also lists buyable products first and re-checks the Assured badge and stock
+// live on every cache hit, which list-products does not.
+export const listShopProducts = (p: ListParams) => listFrom('/api/products/list-products-shop-subcategory', p);
+
+// Same fallback as the website's Deals of the Day strip, with both requests
+// sent at once like its server render (pages/index.js), so the fallback
+// doesn't wait for the first answer.
 export async function getDeals() {
-  const deals = await listProducts({ is_exclusive_deals: 1, available_only: 1, limit: 12 });
-  if (deals.items.length) return deals.items;
-  return (await listProducts({ is_featured: 1, available_only: 1, limit: 12 })).items;
+  const [deals, featured] = await Promise.all([
+    listProducts({ is_exclusive_deals: 1, available_only: 1, limit: 12 }),
+    listProducts({ is_featured: 1, available_only: 1, limit: 12 }),
+  ]);
+  return deals.items.length ? deals.items : featured.items;
 }
 
 export const getTrending = () => listProducts({ is_featured: 1, limit: 12 }).then((p) => p.items);
