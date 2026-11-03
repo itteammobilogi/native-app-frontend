@@ -149,13 +149,16 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
   // On login: fold the guest cart into the member cart, like the website does.
   useEffect(() => {
     if (!ready) return;
+    // Recorded before the merge's await: the profile reload hands over a new
+    // `user` object for the same id mid-merge, which used to merge twice.
+    const merging = !!user && prevUserId.current !== user.id;
+    prevUserId.current = user?.id ?? null;
     (async () => {
-      if (user && prevUserId.current !== user.id) {
+      if (merging) {
         invalidate();
         await mergeGuestCart(await gid()).catch(() => {});
         invalidate();
       }
-      prevUserId.current = user?.id ?? null;
       refresh().catch(() => {});
     })();
   }, [ready, user, gid, refresh]);

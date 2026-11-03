@@ -4,6 +4,7 @@ import type * as NotificationsModule from 'expo-notifications';
 import { Linking, Platform } from 'react-native';
 
 import { api } from '@/core/api/client';
+import { getToken } from '@/core/auth/storage';
 
 // Native push via Expo push tokens, registered on the backend at
 // /api/app-push (website/node: appPushController.js). The website/TWA keep
@@ -68,13 +69,25 @@ export async function getPushStatus(): Promise<PushStatus> {
   return p.canAskAgain ? 'undetermined' : 'denied';
 }
 
+// The last token registered, and for which session: the same pair is never
+// sent twice (sign-in/out changes the session, so that still re-registers).
+let lastSent = '';
+
 export async function registerToken(token: string) {
-  await api.post('/api/app-push/register', {
-    token,
-    platform: Platform.OS,
-    app_version: Constants.expoConfig?.version ?? null,
-    device_name: Device.modelName ?? null,
-  });
+  const key = `${token}|${(await getToken()) ?? ''}`;
+  if (key === lastSent) return;
+  lastSent = key;
+  await api
+    .post('/api/app-push/register', {
+      token,
+      platform: Platform.OS,
+      app_version: Constants.expoConfig?.version ?? null,
+      device_name: Device.modelName ?? null,
+    })
+    .catch((e) => {
+      lastSent = ''; // not sent after all: let the next sync retry
+      throw e;
+    });
 }
 
 // Registers this device's token with the backend (and so with whoever is
@@ -126,7 +139,16 @@ export function watchNotifications(onUrl: (url: string) => void) {
     const url = urlOf(r);
     if (url) onUrl(url);
   });
-  const rotate = Notifications.addPushTokenListener(() => {
+  // Android reports the device token here every time one is fetched,
+  // including by getExpoPushTokenAsync itself, so re-fetching on every event
+  // fed itself: one registration per round trip for as long as the app was
+  // open (70+ in 15 s), which starved every other request. Only a device
+  // token we haven't seen is a real rotation.
+  let lastDevice: string | null = null;
+  const rotate = Notifications.addPushTokenListener(({ data }) => {
+    const device = String(data);
+    if (device === lastDevice) return;
+    lastDevice = device;
     Notifications.getExpoPushTokenAsync({ projectId })
       .then(({ data }) => registerToken(data))
       .catch(() => {});

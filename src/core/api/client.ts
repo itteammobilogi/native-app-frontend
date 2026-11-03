@@ -17,6 +17,23 @@ api.interceptors.request.use(async (config) => {
   return config;
 });
 
+// TEMP-TIMING: remove after the journey test.
+api.interceptors.request.use((config) => {
+  (config as any).__t = Date.now();
+  return config;
+});
+api.interceptors.response.use(
+  (res) => {
+    console.log(`[API] ${res.status} ${Date.now() - (res.config as any).__t}ms ${res.config.method?.toUpperCase()} ${res.config.url}`);
+    return res;
+  },
+  (err) => {
+    const c = err?.config ?? {};
+    console.log(`[API] ERR ${err?.response?.status ?? err?.code} ${Date.now() - (c.__t ?? Date.now())}ms ${c.method?.toUpperCase()} ${c.url}`);
+    return Promise.reject(err);
+  },
+);
+
 // authMiddleware answers a missing/expired token with a bare 401 {error} (no
 // `code`), so any 401 on a request that carried a token means "logged out".
 type UnauthorizedHandler = () => void;
