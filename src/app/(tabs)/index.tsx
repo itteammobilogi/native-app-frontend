@@ -22,7 +22,7 @@ import {
   getTrending,
   type Banner,
 } from '@/core/api/catalog';
-import { DOMAINS_CACHE, FIVE_MIN, useAsync } from '@/core/hooks/useAsync';
+import { useAsync } from '@/core/hooks/useAsync';
 import { openSiteLink } from '@/core/links';
 import { useLocation } from '@/core/location/LocationContext';
 import { IconButton, tap } from '@/ui/Button';
@@ -50,23 +50,22 @@ export default function HomeScreen() {
 
   // Each strip loads independently (like the website), so one slow or failing
   // source doesn't blank the whole page.
-  const banners = useAsync(() => getBanners().catch(() => [] as Banner[]), [], { key: 'home:banners', persist: true, staleTime: FIVE_MIN });
-  const filters = useAsync(() => getQuickFilters().catch(() => []), [], { key: 'home:filters', persist: true, staleTime: FIVE_MIN });
-  const domains = useAsync(getDomains, [], DOMAINS_CACHE);
-  const deals = useAsync(getDeals, [], { key: 'home:deals', persist: true });
-  const trending = useAsync(getTrending, [], { key: 'home:trending', persist: true });
+  const banners = useAsync(() => getBanners().catch(() => [] as Banner[]), []);
+  const filters = useAsync(() => getQuickFilters().catch(() => []), []);
+  const domains = useAsync(getDomains, []);
+  const deals = useAsync(getDeals, []);
+  const trending = useAsync(getTrending, []);
   // ~420 kB per call (each brand carries its page HTML), so only the tile's
   // fields are kept, and like the website it's refreshed every 10 minutes.
   const brands = useAsync(
     () => listBrands({ featured: true, limit: 12 }).then((p) => p.items.map(({ id, name, slug, logo }) => ({ id, name, slug, logo }))),
     [],
-    { key: 'home:brands', persist: true, staleTime: 10 * 60_000 },
   );
 
   const refreshing = deals.refreshing || trending.refreshing;
   const { recent, wishlist } = useSaved();
   const unread = useUnreadNotifications();
-  const combos = useAsync(() => listCombos().catch(() => [] as Combo[]), [], { key: 'home:combos', persist: true, staleTime: FIVE_MIN });
+  const combos = useAsync(() => listCombos().catch(() => [] as Combo[]), []);
 
   const onRefresh = () => [banners, filters, domains, deals, trending, brands, combos].forEach((s) => s.refresh());
 

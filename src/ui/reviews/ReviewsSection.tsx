@@ -8,7 +8,7 @@ import { getMyReview, reviewImageUrl, type ReviewsPage, type ReviewSummary } fro
 import { useAuth } from '@/core/auth/AuthContext';
 import { useAsync } from '@/core/hooks/useAsync';
 import { useReviewVotes } from '@/core/hooks/useReviewVotes';
-import { getReviewGallery, REVIEW_GALLERY_CACHE } from '@/core/productPreview';
+import { getReviewGallery } from '@/core/productPreview';
 import { Button, tap } from '@/ui/Button';
 import { Glass } from '@/ui/Glass';
 import { Skeleton } from '@/ui/Skeleton';
@@ -43,8 +43,7 @@ export function ReviewsSection({
   const [writeOpen, setWriteOpen] = useState(false);
   const [viewer, setViewer] = useState<number | null>(null);
 
-  // Started on press-in with the rest of the page (openingProduct).
-  const gallery = useAsync(() => getReviewGallery(productId), [productId], REVIEW_GALLERY_CACHE);
+  const gallery = useAsync(() => getReviewGallery(productId), [productId]);
   const mine = useAsync(() => (isLoggedIn ? getMyReview(productId) : Promise.resolve(null)), [productId, user?.id]);
 
   const summary = top?.summary;

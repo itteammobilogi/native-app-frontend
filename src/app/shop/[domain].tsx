@@ -4,7 +4,7 @@ import { ScrollView, View } from 'react-native';
 
 import { DOMAIN_META, getSubcategories, listShopProducts, type Sort } from '@/core/api/catalog';
 import { SERVER_SORTS, type Filters } from '@/core/filters';
-import { FIVE_MIN, useAsync, usePaged } from '@/core/hooks/useAsync';
+import { useAsync, usePaged } from '@/core/hooks/useAsync';
 import { IconButton } from '@/ui/Button';
 import { Chip } from '@/ui/Chip';
 import { FilterBar, FilterSheet } from '@/ui/FilterSheet';
@@ -16,7 +16,7 @@ export default function ShopScreen() {
   const [filters, setFilters] = useState<Filters>({ sort: 'created_desc', category: initialSub });
   const [filterOpen, setFilterOpen] = useState(false);
 
-  const subs = useAsync(() => getSubcategories(domain), [domain], { key: 'shop:subcategories', staleTime: FIVE_MIN });
+  const subs = useAsync(() => getSubcategories(domain), [domain]);
   const categories = (subs.data ?? []).map((s) => ({ value: s.slug, label: s.category_name }));
 
   const list = usePaged(
@@ -36,11 +36,6 @@ export default function ShopScreen() {
         in_stock: filters.inStock ? 1 : undefined,
       }),
     [domain, filters],
-    // Kept on the phone: a whole-domain listing ("All") is a query the website
-    // never sends, so the backend rarely has it cached (~10 s cold). With this
-    // only a shopper's first visit waits; later ones show the saved page and
-    // refresh it behind.
-    { key: 'shop:products', persist: true },
   );
 
   const title = DOMAIN_META[domain]?.name ?? domain?.replace(/-/g, ' ');

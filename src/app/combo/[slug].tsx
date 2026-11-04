@@ -31,7 +31,7 @@ export default function ComboScreen() {
   const cart = useCart();
   const { pincodeId } = useLocation();
 
-  const combo = useAsync(() => getCombo(slug), [slug], { key: 'combo' });
+  const combo = useAsync(() => getCombo(slug), [slug]);
   const c = combo.data;
 
   // Track what the shopper unticked rather than what is ticked, so every

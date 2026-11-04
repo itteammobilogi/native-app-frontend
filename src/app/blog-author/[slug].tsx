@@ -3,7 +3,7 @@ import { useLocalSearchParams } from 'expo-router';
 import { FlatList, StyleSheet, View } from 'react-native';
 
 import { authorPhoto, getAuthorPosts } from '@/core/api/blogs';
-import { FIVE_MIN, useAsync } from '@/core/hooks/useAsync';
+import { useAsync } from '@/core/hooks/useAsync';
 import { BlogCard } from '@/ui/BlogCard';
 import { Glass } from '@/ui/Glass';
 import { usePageInsets } from '@/ui/GlassTabBar';
@@ -18,7 +18,7 @@ export default function BlogAuthorScreen() {
   const { slug } = useLocalSearchParams<{ slug: string }>();
   const t = usePalette();
   const insets = usePageInsets();
-  const posts = useAsync(() => getAuthorPosts(slug), [slug], { key: 'blog-author', staleTime: FIVE_MIN });
+  const posts = useAsync(() => getAuthorPosts(slug), [slug]);
   const a = posts.data?.[0];
   const photo = authorPhoto(a?.author_profile_photo);
 

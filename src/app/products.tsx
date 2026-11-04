@@ -35,7 +35,7 @@ export default function ProductsScreen() {
       return listProducts({ ...FLAGS.featured, ...params });
     }
     return res;
-  }, [flag, filters], { key: 'products' });
+  }, [flag, filters]);
 
   return (
     <Screen tabBar="index">

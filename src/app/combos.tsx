@@ -4,7 +4,7 @@ import { router } from 'expo-router';
 import { FlatList, Pressable, RefreshControl, StyleSheet, View } from 'react-native';
 
 import { comboPricing, listCombos, type Combo } from '@/core/api/combos';
-import { FIVE_MIN, useAsync } from '@/core/hooks/useAsync';
+import { useAsync } from '@/core/hooks/useAsync';
 import { formatINR } from '@/core/pricing';
 import { tap } from '@/ui/Button';
 import { Glass } from '@/ui/Glass';
@@ -18,7 +18,7 @@ import { radius, usePalette } from '@/ui/theme';
 export default function CombosScreen() {
   const t = usePalette();
   const insets = usePageInsets();
-  const combos = useAsync(listCombos, [], { key: 'combos', persist: true, staleTime: FIVE_MIN });
+  const combos = useAsync(listCombos, []);
 
   return (
     <Screen tabBar="index">

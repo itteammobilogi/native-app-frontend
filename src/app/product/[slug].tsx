@@ -20,10 +20,7 @@ import { useAsync } from '@/core/hooks/useAsync';
 import {
   getRelated,
   getTopReviews,
-  PRODUCT_CACHE,
   productPreview,
-  RELATED_CACHE,
-  TOP_REVIEWS_CACHE,
 } from '@/core/productPreview';
 import { useLocation } from '@/core/location/LocationContext';
 import { useSaved } from '@/core/saved/SavedContext';
@@ -52,13 +49,12 @@ export default function ProductScreen() {
   const cart = useCart();
   const { pincodeId } = useLocation();
 
-  const product = useAsync(() => getProduct(slug), [slug], PRODUCT_CACHE);
+  const product = useAsync(() => getProduct(slug), [slug]);
   const p = product.data;
   // The tapped card's name, image and price, shown while the details load.
   const preview = productPreview(slug);
   // Reviews and related products don't wait for the details: the tapped
-  // card has the group id, domain and subcategory too, and openingProduct
-  // already started these with the same deps.
+  // card has the group id, domain and subcategory too.
   const groupId = p?.id ?? preview?.id;
   const domain = p?.category ?? preview?.domain_slug ?? null;
   const subcategory = p?.subcategory ?? preview?.category_slug ?? null;
@@ -67,10 +63,9 @@ export default function ProductScreen() {
   const reviews = useAsync(
     () => (groupId ? getTopReviews(groupId) : Promise.resolve(undefined)),
     [groupId],
-    TOP_REVIEWS_CACHE,
   );
   const rating = reviews.data?.summary;
-  const related = useAsync(() => getRelated(domain, subcategory, slug), [domain, subcategory, slug], RELATED_CACHE);
+  const related = useAsync(() => getRelated(domain, subcategory, slug), [domain, subcategory, slug]);
 
   const [variantId, setVariantId] = useState<number | null>(null);
   const [qty, setQty] = useState(1);
