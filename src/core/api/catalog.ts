@@ -1,4 +1,4 @@
-import { create } from 'axios';
+import { create, isAxiosError } from 'axios';
 
 import { ADMIN_API_URL, WEBSITE_URL } from '@/core/config';
 import { isProductUnavailable } from '@/core/pricing';
@@ -209,7 +209,26 @@ export const listProducts = (p: ListParams) => listFrom('/api/products/list-prod
 // use (components/shop/SubCategory.js), so it shares their warm cache. It
 // also lists buyable products first and re-checks the Assured badge and stock
 // live on every cache hit, which list-products does not.
-export const listShopProducts = (p: ListParams) => listFrom('/api/products/list-products-shop-subcategory', p);
+const listWebsiteShopProducts = (p: ListParams) => listFrom('/api/products/list-products-shop-subcategory', p);
+
+// The app's own copy of that listing (/api/app/shop-products,
+// appShopController): same products and order, with seller queries in
+// parallel, its own Redis cache and a slimmer response. Until a server has it
+// (404), or when it fails with a 5xx, the website's endpoint is used instead;
+// a 404 switches to it for the rest of the session.
+let appShopEndpoint = true;
+export async function listShopProducts(p: ListParams): Promise<Page<ProductSummary>> {
+  if (appShopEndpoint) {
+    try {
+      return await listFrom('/api/app/shop-products', p);
+    } catch (e) {
+      const status = isAxiosError(e) ? e.response?.status : undefined;
+      if (status === 404) appShopEndpoint = false;
+      else if (!(status && status >= 500)) throw e;
+    }
+  }
+  return listWebsiteShopProducts(p);
+}
 
 // Same fallback as the website's Deals of the Day strip, with both requests
 // sent at once like its server render (pages/index.js), so the fallback
