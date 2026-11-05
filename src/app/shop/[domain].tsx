@@ -2,9 +2,10 @@ import { router, useLocalSearchParams } from 'expo-router';
 import { useState } from 'react';
 import { ScrollView, View } from 'react-native';
 
-import { DOMAIN_META, getSubcategories, listShopProducts, type Sort } from '@/core/api/catalog';
+import { DOMAIN_META } from '@/core/api/catalog';
 import { SERVER_SORTS, type Filters } from '@/core/filters';
 import { useAsync, usePaged } from '@/core/hooks/useAsync';
+import { loadShopPage, loadSubcategories, peekShopPage } from '@/core/shopListing';
 import { IconButton } from '@/ui/Button';
 import { Chip } from '@/ui/Chip';
 import { FilterBar, FilterSheet } from '@/ui/FilterSheet';
@@ -16,26 +17,15 @@ export default function ShopScreen() {
   const [filters, setFilters] = useState<Filters>({ sort: 'created_desc', category: initialSub });
   const [filterOpen, setFilterOpen] = useState(false);
 
-  const subs = useAsync(() => getSubcategories(domain), [domain]);
+  const subs = useAsync(() => loadSubcategories(domain), [domain]);
   const categories = (subs.data ?? []).map((s) => ({ value: s.slug, label: s.category_name }));
 
+  // Cached in the app (core/shopListing): a page the categories screen
+  // prefetched, or one seen earlier, shows at once while it's refetched.
   const list = usePaged(
-    (page) =>
-      // The website's shop listing query (components/shop/SubCategory.js),
-      // value for value, so it shares that page's warm cache (see
-      // listShopProducts). It sends no in_stock at all unless filtered.
-      listShopProducts({
-        domain,
-        subcategory: filters.category,
-        status: 'all',
-        page,
-        limit: 24,
-        sort: filters.sort as Sort,
-        min: filters.min,
-        max: filters.max,
-        in_stock: filters.inStock ? 1 : undefined,
-      }),
+    (page, fresh) => loadShopPage(domain, filters, page, fresh),
     [domain, filters],
+    () => peekShopPage(domain, filters),
   );
 
   const title = DOMAIN_META[domain]?.name ?? domain?.replace(/-/g, ' ');

@@ -1,11 +1,13 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { Image } from 'expo-image';
 import { router } from 'expo-router';
+import { useEffect } from 'react';
 import { Pressable, RefreshControl, ScrollView, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { absUrl, DOMAIN_META, domainName, getDomains } from '@/core/api/catalog';
 import { useAsync } from '@/core/hooks/useAsync';
+import { prefetchAllShops, prefetchShop } from '@/core/shopListing';
 import { tap } from '@/ui/Button';
 import { Glass } from '@/ui/Glass';
 import { Screen } from '@/ui/Screen';
@@ -17,6 +19,11 @@ export default function CategoriesScreen() {
   const t = usePalette();
   const insets = useSafeAreaInsets();
   const domains = useAsync(getDomains, []);
+
+  // Fetch every category's first page now, so the tap opens a filled list.
+  useEffect(() => {
+    if (domains.data) prefetchAllShops(domains.data.map((d) => d.slug));
+  }, [domains.data]);
 
   return (
     <Screen>
@@ -36,6 +43,7 @@ export default function CategoriesScreen() {
           return (
             <Pressable
               key={d.slug}
+              onPressIn={() => prefetchShop(d.slug)}
               onPress={() => (tap(), router.push({ pathname: '/shop/[domain]', params: { domain: d.slug } }))}
               style={({ pressed }) => ({ transform: [{ scale: pressed ? 0.98 : 1 }] })}>
               <Glass radius={radius.lg} style={styles.row}>

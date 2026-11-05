@@ -70,8 +70,15 @@ type PagedState<T> = { key: string | null; items: T[]; page: number; hasMore: bo
 
 type FirstPage<T> = { items: T[]; hasMore: boolean };
 
-// Infinite list on top of a page loader.
-export function usePaged<T>(load: (page: number) => Promise<FirstPage<T>>, deps: unknown[]) {
+// Infinite list on top of a page loader. `fresh` is true when the user asked
+// for new data (pull-to-refresh, retry), so a caching loader can skip its
+// cache. `peek` may return an already loaded first page for the current deps,
+// which is shown at once instead of the loading state while it's refetched.
+export function usePaged<T>(
+  load: (page: number, fresh: boolean) => Promise<FirstPage<T>>,
+  deps: unknown[],
+  peek?: () => FirstPage<T> | undefined,
+) {
   const key = keyOf(deps);
   const [state, setState] = useState<PagedState<T>>({ key: null, items: [], page: 1, hasMore: true, error: null });
   const [loadingMore, setLoadingMore] = useState(false);
@@ -80,10 +87,10 @@ export function usePaged<T>(load: (page: number) => Promise<FirstPage<T>>, deps:
   const seq = useRef(0);
 
   const fetchFirst = useCallback(
-    async (k: string) => {
+    async (k: string, fresh = false) => {
       const id = ++seq.current;
       try {
-        const res = await loadRef.current(1);
+        const res = await loadRef.current(1, fresh);
         if (id !== seq.current) return;
         setState({ key: k, items: res.items, page: 1, hasMore: res.hasMore, error: null });
       } catch (e) {
@@ -100,14 +107,16 @@ export function usePaged<T>(load: (page: number) => Promise<FirstPage<T>>, deps:
     fetchFirst(key);
   }, [key, fetchFirst]);
 
-  const loading = state.key !== key;
+  const stale = state.key !== key;
+  const peeked = stale ? peek?.() : undefined;
+  const loading = stale && !peeked;
 
   const loadMore = async () => {
-    if (!state.hasMore || loading || loadingMore) return;
+    if (!state.hasMore || stale || loadingMore) return;
     const id = seq.current;
     setLoadingMore(true);
     try {
-      const res = await loadRef.current(state.page + 1);
+      const res = await loadRef.current(state.page + 1, false);
       if (id !== seq.current) return;
       setState((s) => {
         // Listings round-robin sellers, so a later page can repeat an item.
@@ -123,20 +132,20 @@ export function usePaged<T>(load: (page: number) => Promise<FirstPage<T>>, deps:
   };
 
   return {
-    items: loading ? [] : state.items,
-    hasMore: state.hasMore,
+    items: peeked ? peeked.items : loading ? [] : state.items,
+    hasMore: peeked ? peeked.hasMore : state.hasMore,
     loading,
     loadingMore,
     refreshing,
-    error: loading ? null : state.error,
+    error: stale ? null : state.error,
     loadMore,
     refresh: () => {
       setRefreshing(true);
-      fetchFirst(key);
+      fetchFirst(key, true);
     },
     reload: () => {
       setState((s) => ({ ...s, key: null }));
-      fetchFirst(key);
+      fetchFirst(key, true);
     },
   };
 }

@@ -1,12 +1,13 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { Image } from 'expo-image';
 import { router } from 'expo-router';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Pressable, RefreshControl, ScrollView, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { listBrands } from '@/core/api/brands';
 import { listCombos, type Combo } from '@/core/api/combos';
+import { getForYou } from '@/core/api/reco';
 import { useUnreadNotifications } from '@/core/hooks/useUnreadNotifications';
 import { useSaved } from '@/core/saved/SavedContext';
 import { useAuth } from '@/core/auth/AuthContext';
@@ -23,6 +24,7 @@ import {
   type Banner,
 } from '@/core/api/catalog';
 import { useAsync } from '@/core/hooks/useAsync';
+import { prefetchAllShops, prefetchShop } from '@/core/shopListing';
 import { openSiteLink } from '@/core/links';
 import { useLocation } from '@/core/location/LocationContext';
 import { IconButton, tap } from '@/ui/Button';
@@ -66,8 +68,19 @@ export default function HomeScreen() {
   const { recent, wishlist } = useSaved();
   const unread = useUnreadNotifications();
   const combos = useAsync(() => listCombos().catch(() => [] as Combo[]), []);
+  // "Picked for you" comes from the shopper's own orders, so it's loaded
+  // again when the logged-in user changes. Like the website, it needs at
+  // least two products to show.
+  const forYou = useAsync(() => (user ? getForYou() : Promise.resolve([])), [user?.id]);
 
-  const onRefresh = () => [banners, filters, domains, deals, trending, brands, combos].forEach((s) => s.refresh());
+  // Once the home strips are in, fetch every category's first page so the
+  // "Shop by category" tiles open a filled list.
+  const homeReady = !deals.loading && !trending.loading;
+  useEffect(() => {
+    if (homeReady && domains.data) prefetchAllShops(domains.data.map((d) => d.slug));
+  }, [homeReady, domains.data]);
+
+  const onRefresh = () => [banners, filters, domains, deals, trending, brands, combos, forYou].forEach((s) => s.refresh());
 
   const firstName = user?.name?.trim().split(/\s+/)[0];
   // Below the search bar, wait for the launch intro to settle, then mount the
@@ -152,6 +165,7 @@ export default function HomeScreen() {
                   <Pressable
                     key={d.slug}
                     style={styles.catItem}
+                    onPressIn={() => prefetchShop(d.slug)}
                     onPress={() => (tap(), router.push({ pathname: '/shop/[domain]', params: { domain: d.slug } }))}>
                     <Glass radius={radius.lg} style={styles.catTile}>
                       {meta ? (
@@ -220,6 +234,10 @@ export default function HomeScreen() {
               loading={deals.loading}
               onSeeAll={() => router.push({ pathname: '/products', params: { flag: 'deals', title: 'Deals of the day' } })}
             />
+
+            {(forYou.data?.length ?? 0) >= 2 && (
+              <ProductRail title="Picked for you" icon="sparkles" items={forYou.data} loading={false} />
+            )}
           </>
         )}
 
