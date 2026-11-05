@@ -85,15 +85,27 @@ export function prefetchShop(domain: string) {
   loadSubcategories(domain);
 }
 
-// Every domain's first page, two at a time so the prefetch doesn't crowd out
-// the requests the screen on display is making.
-export async function prefetchAllShops(domains: string[]) {
-  const queue = [...domains];
+// Runs the loads two at a time so a prefetch doesn't crowd out the requests
+// the screen on display is making.
+async function twoAtATime(jobs: (() => Promise<unknown>)[]) {
+  const queue = [...jobs];
   const worker = async () => {
-    for (let d = queue.shift(); d; d = queue.shift()) {
-      await loadShopPage(d, DEFAULT_SHOP_FILTERS, 1).catch(() => {});
-      await loadSubcategories(d);
-    }
+    for (let job = queue.shift(); job; job = queue.shift()) await job().catch(() => {});
   };
   await Promise.all([worker(), worker()]);
 }
+
+// Every domain's first page.
+export const prefetchAllShops = (domains: string[]) =>
+  twoAtATime(
+    domains.filter(Boolean).map((d) => async () => {
+      await loadShopPage(d, DEFAULT_SHOP_FILTERS, 1);
+      await loadSubcategories(d);
+    }),
+  );
+
+// First pages for other filter combinations of one domain (other sorts, price
+// presets), so picking one shows it at once. Pages already cached or in flight
+// are not asked again.
+export const prefetchShopVariants = (domain: string, variants: Filters[]) =>
+  twoAtATime(variants.map((f) => () => loadShopPage(domain, f, 1)));

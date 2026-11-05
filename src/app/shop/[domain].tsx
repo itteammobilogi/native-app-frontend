@@ -1,11 +1,11 @@
 import { router, useLocalSearchParams } from 'expo-router';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { ScrollView, View } from 'react-native';
 
 import { DOMAIN_META } from '@/core/api/catalog';
-import { SERVER_SORTS, type Filters } from '@/core/filters';
+import { PRICE_PRESETS, SERVER_SORTS, type Filters } from '@/core/filters';
 import { useAsync, usePaged } from '@/core/hooks/useAsync';
-import { loadShopPage, loadSubcategories, peekShopPage } from '@/core/shopListing';
+import { loadShopPage, loadSubcategories, peekShopPage, prefetchShopVariants } from '@/core/shopListing';
 import { IconButton } from '@/ui/Button';
 import { Chip } from '@/ui/Chip';
 import { FilterBar, FilterSheet } from '@/ui/FilterSheet';
@@ -27,6 +27,28 @@ export default function ShopScreen() {
     [domain, filters],
     () => peekShopPage(domain, filters),
   );
+
+  // Once this list is in, fetch the same list in the other sort orders, so
+  // switching sort shows it at once.
+  const listReady = !list.loading && !list.error;
+  useEffect(() => {
+    if (!listReady) return;
+    prefetchShopVariants(
+      domain,
+      SERVER_SORTS.filter((s) => s.value !== filters.sort).map((s) => ({ ...filters, sort: s.value })),
+    );
+  }, [listReady, domain, filters]);
+
+  // Price presets are only fetched when the filter drawer opens: five heavy
+  // queries per category is too many to send for every visit, and the
+  // drawer is open a few seconds before "Apply".
+  const openFilters = () => {
+    setFilterOpen(true);
+    prefetchShopVariants(
+      domain,
+      PRICE_PRESETS.map((p) => ({ ...filters, min: p.min, max: p.max })),
+    );
+  };
 
   const title = DOMAIN_META[domain]?.name ?? domain?.replace(/-/g, ' ');
   const setCategory = (category?: string) => setFilters((f) => ({ ...f, category }));
@@ -56,7 +78,7 @@ export default function ShopScreen() {
               <FilterBar
                 value={filters}
                 onChange={setFilters}
-                onOpen={() => setFilterOpen(true)}
+                onOpen={openFilters}
                 sorts={SERVER_SORTS}
                 categories={categories}
                 count={list.loading ? null : `${list.items.length}${list.hasMore ? '+' : ''} items`}
