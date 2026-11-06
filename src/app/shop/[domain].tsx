@@ -39,6 +39,14 @@ export default function ShopScreen() {
     );
   }, [listReady, domain, filters]);
 
+  // A page the server hasn't cached takes 4-7 s, so the next page is asked
+  // for as soon as this one is in; scrolling to the end then appends it from
+  // the app's cache (loadShopPage reuses the same in-flight request).
+  const nextPage = list.hasMore ? list.page + 1 : 0;
+  useEffect(() => {
+    if (listReady && nextPage) loadShopPage(domain, filters, nextPage).catch(() => {});
+  }, [listReady, nextPage, domain, filters]);
+
   // Price presets are only fetched when the filter drawer opens: five heavy
   // queries per category is too many to send for every visit, and the
   // drawer is open a few seconds before "Apply".

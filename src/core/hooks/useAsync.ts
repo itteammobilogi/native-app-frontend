@@ -134,6 +134,8 @@ export function usePaged<T>(
   return {
     items: peeked ? peeked.items : loading ? [] : state.items,
     hasMore: peeked ? peeked.hasMore : state.hasMore,
+    // Last page loaded for the current deps (1 while a peeked page is shown).
+    page: stale ? 1 : state.page,
     loading,
     loadingMore,
     refreshing,
