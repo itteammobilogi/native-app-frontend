@@ -9,13 +9,13 @@ import { usePalette } from './theme';
 // with `brightness-0 invert`.
 const RATIO = 290 / 110;
 
-export function Logo({ height = 32, style }: { height?: number; style?: StyleProp<ImageStyle> }) {
+export function Logo({ height = 32, style, tint }: { height?: number; style?: StyleProp<ImageStyle>; tint?: string }) {
   const t = usePalette();
   return (
     <Image
       source={require('@/assets/brand/wordmark.png')}
       style={[{ height, width: height * RATIO }, style]}
-      tintColor={t.dark ? '#FFFFFF' : undefined}
+      tintColor={tint ?? (t.dark ? '#FFFFFF' : undefined)}
       contentFit="contain"
       accessibilityLabel="ZillyBuy"
     />

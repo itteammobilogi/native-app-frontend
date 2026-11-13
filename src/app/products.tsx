@@ -14,11 +14,15 @@ import { Header, Screen } from '@/ui/Screen';
 const FLAGS: Record<string, ListParams> = {
   deals: { is_exclusive_deals: 1, available_only: 1 },
   featured: { is_featured: 1, available_only: 1 },
+  // Every available product; the home "Under ₹99" tile opens this with `max`.
+  all: { available_only: 1 },
 };
 
 export default function ProductsScreen() {
-  const { flag = 'featured', title } = useLocalSearchParams<{ flag?: string; title?: string }>();
-  const [filters, setFilters] = useState<Filters>({ sort: 'created_desc' });
+  const { flag = 'featured', title, max } = useLocalSearchParams<{ flag?: string; title?: string; max?: string }>();
+  const [filters, setFilters] = useState<Filters>(() =>
+    Number(max) > 0 ? { sort: 'price_asc', max: Number(max) } : { sort: 'created_desc' },
+  );
   const [filterOpen, setFilterOpen] = useState(false);
 
   const list = usePaged(async (page) => {
@@ -29,7 +33,7 @@ export default function ProductsScreen() {
       in_stock: filters.inStock ? 1 : undefined,
       page,
     };
-    const res = await listProducts({ ...FLAGS[flag], ...params });
+    const res = await listProducts({ ...(FLAGS[flag] ?? FLAGS.featured), ...params });
     // Same fallback as the home strip: no live deals → show featured.
     if (flag === 'deals' && page === 1 && !res.items.length) {
       return listProducts({ ...FLAGS.featured, ...params });

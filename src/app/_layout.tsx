@@ -8,12 +8,15 @@ import { AddressPincodeSync } from '@/core/location/AddressPincodeSync';
 import { LocationProvider } from '@/core/location/LocationContext';
 import { PushSync } from '@/core/PushSync';
 import { SavedProvider } from '@/core/saved/SavedContext';
+import { loadThemeMode } from '@/core/themePref';
 import { IntroGate } from '@/ui/introGate';
 import { IntroSplash } from '@/ui/IntroSplash';
 import { usePalette } from '@/ui/theme';
 import { ToastProvider } from '@/ui/Toast';
 
 SplashScreen.preventAutoHideAsync();
+// The saved light/dark choice, applied while the splash is still up.
+loadThemeMode();
 
 export default function RootLayout() {
   const t = usePalette();

@@ -1,12 +1,12 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
 import Constants from 'expo-constants';
-import { LinearGradient } from 'expo-linear-gradient';
 import { router, type Href } from 'expo-router';
 import { Alert, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import type { PolicySlug } from '@/core/api/support';
 import { useAuth } from '@/core/auth/AuthContext';
+import { setThemeMode, useThemeMode, type ThemeMode } from '@/core/themePref';
 import { getPushStatus, openNotificationSettings, syncPush } from '@/core/push';
 import { Button, tap } from '@/ui/Button';
 import { Glass } from '@/ui/Glass';
@@ -79,56 +79,69 @@ export default function AccountScreen() {
     .toUpperCase();
 
   return (
-    <Screen>
-      <ScrollView contentContainerStyle={{ paddingTop: insets.top + 12, padding: 16, gap: 16, paddingBottom: TAB_BAR_HEIGHT + insets.bottom + 32 }}>
-        <Text variant="display">Account</Text>
-
-        {isLoggedIn && user ? (
-          <Glass radius={radius.xl} style={styles.profile}>
-            <LinearGradient colors={t.primaryGradient} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.avatar}>
-              <Text variant="title" tone="onPrimary">
-                {initials}
-              </Text>
-            </LinearGradient>
-            <View style={{ flex: 1, gap: 2 }}>
-              <Text variant="heading" numberOfLines={1}>
-                {user.name || 'ZillyBuy shopper'}
-              </Text>
-              {!!user.mobile && (
-                <Text variant="caption" tone="muted">
-                  +91 {user.mobile}
-                </Text>
-              )}
-              {!!user.email && (
-                <Text variant="caption" tone="muted" numberOfLines={1}>
-                  {user.email}
-                </Text>
-              )}
-            </View>
-            <Pressable hitSlop={8} onPress={go('/profile-edit')} accessibilityLabel="Edit profile">
-              <Ionicons name="create-outline" size={22} color={t.primary} />
-            </Pressable>
-          </Glass>
-        ) : (
-          <Glass radius={radius.xl} style={{ padding: 20, gap: 14 }}>
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 14 }}>
-              <LinearGradient colors={t.primaryGradient} style={styles.avatar}>
-                <Ionicons name="person" size={26} color="#fff" />
-              </LinearGradient>
-              <View style={{ flex: 1 }}>
-                <Text variant="heading">Welcome to ZillyBuy</Text>
-                <Text variant="caption" tone="muted">
-                  Login to track orders, save addresses and check out faster.
+    <Screen statusBar="light">
+      <ScrollView contentContainerStyle={{ paddingBottom: TAB_BAR_HEIGHT + insets.bottom + 32 }}>
+        {/* Blue header with the profile */}
+        <View style={[styles.header, { paddingTop: insets.top + 12, backgroundColor: t.dark ? '#0B4A99' : t.primary }]}>
+          <View pointerEvents="none" style={styles.ring} />
+          <Text variant="title" tone="onPrimary">
+            Account
+          </Text>
+          {isLoggedIn && user ? (
+            <View style={styles.profile}>
+              <View style={styles.avatar}>
+                <Text variant="title" style={{ color: '#0066CC' }}>
+                  {initials}
                 </Text>
               </View>
+              <View style={{ flex: 1, gap: 2 }}>
+                <Text variant="heading" tone="onPrimary" numberOfLines={1}>
+                  {user.name || 'ZillyBuy shopper'}
+                </Text>
+                {!!user.mobile && (
+                  <Text variant="caption" style={{ color: 'rgba(255,255,255,0.85)' }}>
+                    +91 {user.mobile}
+                  </Text>
+                )}
+                {!!user.email && (
+                  <Text variant="caption" numberOfLines={1} style={{ color: 'rgba(255,255,255,0.85)' }}>
+                    {user.email}
+                  </Text>
+                )}
+              </View>
+              <Pressable hitSlop={8} onPress={go('/profile-edit')} accessibilityLabel="Edit profile" style={styles.editBtn}>
+                <Ionicons name="create-outline" size={18} color="#fff" />
+              </Pressable>
             </View>
-            <Button title="Login or sign up" onPress={() => router.push('/login')} />
-          </Glass>
-        )}
+          ) : (
+            <View style={{ gap: 12 }}>
+              <View style={styles.profile}>
+                <View style={styles.avatar}>
+                  <Ionicons name="person" size={26} color="#0066CC" />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text variant="heading" tone="onPrimary">
+                    Welcome to ZillyBuy
+                  </Text>
+                  <Text variant="caption" style={{ color: 'rgba(255,255,255,0.85)' }}>
+                    Login to track orders, save addresses and check out faster.
+                  </Text>
+                </View>
+              </View>
+              <Pressable onPress={() => (tap(), router.push('/login'))} style={styles.loginBtn}>
+                <Text variant="label" style={{ color: '#0066CC' }}>
+                  Login or sign up
+                </Text>
+              </Pressable>
+            </View>
+          )}
+        </View>
 
+        <View style={{ padding: 16, gap: 16 }}>
         {isLoggedIn && <Menu title="Shopping" items={shopping} />}
         <Menu title="Discover" items={discover} />
         <Menu title="Support" items={support} />
+        <AppearancePicker />
 
         {isLoggedIn && <Button title="Log out" icon="log-out-outline" variant="glass" onPress={confirmLogout} />}
 
@@ -136,6 +149,7 @@ export default function AccountScreen() {
         <Text variant="caption" tone="faint" style={{ textAlign: 'center' }}>
           ZillyBuy v{Constants.expoConfig?.version ?? '1.0.0'}
         </Text>
+        </View>
       </ScrollView>
     </Screen>
   );
@@ -172,9 +186,51 @@ function Menu({ title, items }: { title: string; items: Item[] }) {
   );
 }
 
+// Light / dark / follow the phone.
+function AppearancePicker() {
+  const t = usePalette();
+  const mode = useThemeMode();
+  const options: [ThemeMode, string, keyof typeof Ionicons.glyphMap][] = [
+    ['system', 'System', 'phone-portrait-outline'],
+    ['light', 'Light', 'sunny-outline'],
+    ['dark', 'Dark', 'moon-outline'],
+  ];
+  return (
+    <View style={{ gap: 8 }}>
+      <Text variant="caption" tone="muted" style={{ marginLeft: 4, textTransform: 'uppercase', letterSpacing: 0.8 }}>
+        Appearance
+      </Text>
+      <View style={[styles.segment, { backgroundColor: t.tileFill }]}>
+        {options.map(([value, label, icon]) => {
+          const on = mode === value;
+          return (
+            <Pressable
+              key={value}
+              accessibilityRole="radio"
+              accessibilityState={{ selected: on }}
+              onPress={() => (tap(), setThemeMode(value))}
+              style={[styles.segItem, on && { backgroundColor: t.glassFill, borderColor: t.glassBorder, borderWidth: 1 }]}>
+              <Ionicons name={icon} size={16} color={on ? t.primary : t.textMuted} />
+              <Text variant="caption" style={{ fontWeight: on ? '700' : '500', color: on ? t.primary : t.textMuted }}>
+                {label}
+              </Text>
+            </Pressable>
+          );
+        })}
+      </View>
+    </View>
+  );
+}
+
 const styles = StyleSheet.create({
-  profile: { flexDirection: 'row', alignItems: 'center', gap: 14, padding: 16 },
-  avatar: { width: 56, height: 56, borderRadius: 28, alignItems: 'center', justifyContent: 'center' },
+  header: { paddingHorizontal: 16, paddingBottom: 18, gap: 14, overflow: 'hidden' },
+  ring: { position: 'absolute', width: 220, height: 220, top: -90, right: -60, borderRadius: 999, borderWidth: 22, borderColor: 'rgba(255,255,255,0.06)' },
+  profile: { flexDirection: 'row', alignItems: 'center', gap: 14 },
+  avatar: { width: 56, height: 56, borderRadius: 28, alignItems: 'center', justifyContent: 'center', backgroundColor: '#FFFFFF' },
+  editBtn: { width: 36, height: 36, borderRadius: 18, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(255,255,255,0.16)' },
+  loginBtn: { height: 46, borderRadius: 12, backgroundColor: '#FFFFFF', alignItems: 'center', justifyContent: 'center' },
+  segment: { flexDirection: 'row', padding: 4, borderRadius: 14, gap: 4 },
+  segItem: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, height: 40, borderRadius: 10 },
   item: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 14, paddingVertical: 13 },
   itemIcon: { width: 34, height: 34, borderRadius: 10, alignItems: 'center', justifyContent: 'center' },
 });

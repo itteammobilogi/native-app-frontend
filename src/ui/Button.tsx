@@ -90,7 +90,7 @@ export function Button({
   );
 }
 
-// Round glass icon button for headers, steppers, favourites.
+// Round icon button for headers, steppers, favourites.
 export function IconButton({
   icon,
   onPress,
@@ -117,9 +117,9 @@ export function IconButton({
         onPress?.();
       }}
       style={({ pressed }) => ({ transform: [{ scale: pressed ? 0.94 : 1 }] })}>
-      <Glass radius={size / 2} style={{ width: size, height: size, alignItems: 'center', justifyContent: 'center' }}>
+      <View style={{ width: size, height: size, borderRadius: size / 2, alignItems: 'center', justifyContent: 'center', backgroundColor: t.tileFill }}>
         <Ionicons name={icon} size={size * 0.48} color={color ?? t.text} />
-      </Glass>
+      </View>
       {!!badge && badge > 0 && (
         <View style={[styles.badge, { backgroundColor: t.danger }]}>
           <Text variant="tiny" tone="onPrimary">

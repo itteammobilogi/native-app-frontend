@@ -11,11 +11,12 @@ import { TAB_BAR_HEIGHT, usePalette } from './theme';
 
 // Same icons as the website's mobile bottom nav (lucide Home, LayoutGrid,
 // ShoppingCart, User).
-const ICONS: Record<string, [keyof typeof Ionicons.glyphMap, keyof typeof Ionicons.glyphMap]> = {
-  index: ['home', 'home-outline'],
-  categories: ['grid', 'grid-outline'],
-  cart: ['cart', 'cart-outline'],
-  account: ['person', 'person-outline'],
+// Outline icons throughout; the active tab only changes colour and weight.
+const ICONS: Record<string, keyof typeof Ionicons.glyphMap> = {
+  index: 'home-outline',
+  categories: 'grid-outline',
+  cart: 'bag-outline',
+  account: 'person-outline',
 };
 
 // The bar is docked to the screen bottom and its fill runs down behind the
@@ -36,13 +37,15 @@ export type TabName = 'index' | 'categories' | 'cart' | 'account';
 
 const TABS: { name: TabName; label: string; href: Href }[] = [
   { name: 'index', label: 'Home', href: '/' },
-  { name: 'categories', label: 'Categories', href: '/categories' },
+  { name: 'categories', label: 'Shelves', href: '/categories' },
   { name: 'cart', label: 'Cart', href: '/cart' },
   { name: 'account', label: 'Account', href: '/account' },
 ];
 
 // The tabs navigator's bar.
 export function GlassTabBar({ state, descriptors, navigation, insets }: BottomTabBarProps) {
+  // The cart has its own checkout bar at the bottom, so no tab bar there.
+  if (state.routes[state.index]?.name === 'cart') return null;
   return (
     <TabBar
       tabs={state.routes.map((route) => ({ key: route.key, name: route.name, label: (descriptors[route.key].options.title ?? route.name) as string }))}
@@ -75,8 +78,8 @@ export function PageTabBar({ active }: { active: TabName }) {
   );
 }
 
-// Matches the website's mobile bottom nav: a solid bar docked full width with
-// a soft upward shadow; the active tab turns brand blue with a filled icon.
+// A solid bar docked full width with a light top border; the active tab's
+// icon and label turn brand blue.
 function TabBar({
   tabs,
   index: activeIndex,
@@ -91,14 +94,14 @@ function TabBar({
   const t = usePalette();
   const { count } = useCart();
   const fill = t.dark ? '#0B1230' : '#FFFFFF';
-  const inactive = t.dark ? t.textMuted : '#9CA3AF'; // website: text-gray-400
+  const inactive = t.dark ? t.textMuted : '#6B7280';
 
   return (
-    <View style={[styles.bar, { paddingBottom: insets.bottom, backgroundColor: fill, borderTopColor: t.hairline }]}>
+    <View style={[styles.bar, { paddingBottom: insets.bottom, backgroundColor: fill, borderTopColor: t.dark ? t.hairline : '#E5E7EB' }]}>
       <View style={styles.row}>
         {tabs.map((tab, index) => {
           const focused = activeIndex === index;
-          const [on, off] = ICONS[tab.name] ?? ['ellipse', 'ellipse-outline'];
+          const icon = ICONS[tab.name] ?? 'ellipse-outline';
           const color = focused ? t.primary : inactive;
 
           return (
@@ -112,12 +115,11 @@ function TabBar({
                 tap();
                 onSelect(index);
               }}>
-              {focused && <View style={[styles.indicator, { backgroundColor: t.primary }]} />}
               <View>
-                <Ionicons name={focused ? on : off} size={24} color={color} />
+                <Ionicons name={icon} size={26} color={color} />
                 {tab.name === 'cart' && count > 0 && (
                   <View style={[styles.badge, { borderColor: fill }]}>
-                    <Text variant="tiny" tone="onPrimary" style={{ fontSize: 10, lineHeight: 12 }}>
+                    <Text variant="tiny" tone="onPrimary" style={{ fontSize: 10, lineHeight: 12, fontWeight: '800' }}>
                       {count > 99 ? '99+' : count}
                     </Text>
                   </View>
@@ -141,7 +143,7 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     bottom: 0,
-    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopWidth: 1.5,
     // The website's soft upward shadow. Not a blurred boxShadow: the bar sits
     // over scrolling content, and Android redraws that blur every frame,
     // which made scrolling stutter. Elevation is drawn by the system for free.
@@ -152,19 +154,18 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: -4 },
   },
   row: { height: TAB_BAR_HEIGHT, flexDirection: 'row', alignItems: 'stretch', paddingHorizontal: 8 },
-  item: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 3 },
-  indicator: { position: 'absolute', top: 0, width: 28, height: 3, borderBottomLeftRadius: 3, borderBottomRightRadius: 3 },
-  label: { fontSize: 11, lineHeight: 14 },
+  item: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 4 },
+  label: { fontSize: 12.5, lineHeight: 16 },
   badge: {
     position: 'absolute',
-    top: -5,
-    right: -10,
-    minWidth: 18,
-    height: 18,
-    borderRadius: 9,
+    top: -4,
+    right: -11,
+    minWidth: 20,
+    height: 20,
+    borderRadius: 10,
     paddingHorizontal: 4,
     borderWidth: 2,
-    backgroundColor: '#DB2777', // website: bg-pink-600
+    backgroundColor: '#0066CC',
     alignItems: 'center',
     justifyContent: 'center',
   },

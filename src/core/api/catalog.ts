@@ -40,6 +40,8 @@ export type Variant = {
   info_attributes?: { name: string; value: string }[];
   returnable?: boolean | number | null;
   cancellable?: boolean | number | null;
+  return_window?: string | null; // ISO 8601 duration, e.g. "P3D"
+  net_quantity?: string | null;
 };
 
 export type ProductDetail = {
@@ -65,6 +67,13 @@ export type ProductDetail = {
   max_value?: number | null;
   bpp_status?: number;
   provider_is_disabled?: number;
+  return_window?: string | null;
+  // "Name,email,phone" from the seller's ONDC catalogue.
+  contact_details_consumer_care?: string | null;
+  tags?: { code: string; list?: { code: string; value: string }[] }[] | null;
+  // Editorial copy written for the website's product page; highlights are
+  // short one-line selling points.
+  content?: { highlights?: string[] | null } | null;
   manufacturer?: {
     name?: string;
     address?: string;
@@ -97,6 +106,22 @@ export async function getBanners(): Promise<Banner[]> {
   return (data?.data ?? [])
     .map((b: any) => ({ id: b.id, title: b.title, link_url: b.link_url, image: https(b.mobile_image || b.desktop_image) }))
     .filter((b: Banner) => !!b.image);
+}
+
+// Photo cards near the bottom of the home page, managed in the admin's
+// "App Guide Banners" page. Empty when none are live, or when the admin API
+// doesn't have the endpoint yet; the home page then shows the newest blog post.
+export type GuideBanner = { id: number; label: string; title: string; link_url: string; image: string };
+
+export async function getGuideBanners(): Promise<GuideBanner[]> {
+  try {
+    const { data } = await admin.get('/app-guide-banners/active');
+    return (data?.data ?? [])
+      .map((b: any) => ({ id: b.id, label: b.label || 'GUIDE', title: b.title, link_url: b.link_url, image: https(b.image) }))
+      .filter((b: GuideBanner) => !!b.image && !!b.title);
+  } catch {
+    return [];
+  }
 }
 
 export async function getQuickFilters(): Promise<QuickFilter[]> {

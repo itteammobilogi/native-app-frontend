@@ -8,7 +8,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { search, type SearchResult } from '@/core/api/catalog';
 import { usePaged } from '@/core/hooks/useAsync';
-import { IconButton, tap } from '@/ui/Button';
+import { tap } from '@/ui/Button';
 import { Chip } from '@/ui/Chip';
 import { Glass } from '@/ui/Glass';
 import { tabBarSpace } from '@/ui/GlassTabBar';
@@ -84,9 +84,11 @@ export default function SearchScreen() {
 
   return (
     <Screen tabBar="index">
-      <View style={[styles.bar, { paddingTop: insets.top + 8 }]}>
-        <IconButton icon="chevron-back" label="Back" onPress={() => router.back()} />
-        <Glass radius={radius.md} style={styles.inputWrap}>
+      <View style={[styles.bar, { paddingTop: insets.top + 8, backgroundColor: t.glassFill, borderBottomColor: t.hairline }]}>
+        <Pressable accessibilityRole="button" accessibilityLabel="Back" hitSlop={8} style={styles.back} onPress={() => (tap(), router.back())}>
+          <Ionicons name="arrow-back" size={22} color={t.text} />
+        </Pressable>
+        <View style={[styles.inputWrap, { backgroundColor: t.tileFill, borderColor: text ? t.primary : 'transparent' }]}>
           <Ionicons name="search" size={18} color={t.textMuted} />
           <TextInput
             value={text}
@@ -108,7 +110,7 @@ export default function SearchScreen() {
               <Ionicons name="close-circle" size={18} color={t.textFaint} />
             </Pressable>
           )}
-        </Glass>
+        </View>
       </View>
 
       {suggest ? (
@@ -168,7 +170,7 @@ export default function SearchScreen() {
           {recent.length > 0 && (
             <>
               <View style={styles.row}>
-                <Text variant="heading">Recent searches</Text>
+                <Text variant="heading" style={{ fontSize: 16 }}>Recent searches</Text>
                 <Text variant="label" tone="primary" onPress={clearRecent} suppressHighlighting>
                   Clear
                 </Text>
@@ -180,7 +182,7 @@ export default function SearchScreen() {
               </View>
             </>
           )}
-          <Text variant="heading">Popular</Text>
+          <Text variant="heading" style={{ fontSize: 16 }}>Popular right now</Text>
           <View style={styles.wrap}>
             {['Earbuds', 'Smart watch', 'Face wash', 'Kurti', 'Atta', 'Mixer grinder', 'Protein'].map((r) => (
               <Chip key={r} label={r} onPress={() => submit(r)} />
@@ -211,11 +213,13 @@ function SuggestRow({
       onPress={() => (tap(), onPress())}
       style={({ pressed }) => [styles.suggest, pressed && { backgroundColor: t.hairline }]}>
       {image !== undefined ? (
-        <View style={styles.thumb}>
+        <View style={[styles.thumb, { backgroundColor: t.tileFill }]}>
           {image ? <Image source={{ uri: image }} style={{ width: 34, height: 34 }} contentFit="contain" /> : null}
         </View>
       ) : (
-        <Ionicons name={icon!} size={18} color={t.textMuted} style={{ width: 40, textAlign: 'center' }} />
+        <View style={[styles.thumb, { backgroundColor: t.tileFill }]}>
+          <Ionicons name={icon!} size={17} color={t.primary} />
+        </View>
       )}
       <Text numberOfLines={1} style={{ flex: 1 }}>
         {label}
@@ -230,13 +234,14 @@ function SuggestRow({
 }
 
 const styles = StyleSheet.create({
-  bar: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingHorizontal: 16, paddingBottom: 10 },
-  inputWrap: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 8, height: 48, paddingHorizontal: 14 },
+  bar: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 8, paddingRight: 16, paddingBottom: 10, borderBottomWidth: StyleSheet.hairlineWidth },
+  back: { width: 40, height: 40, alignItems: 'center', justifyContent: 'center' },
+  inputWrap: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 8, height: 46, paddingHorizontal: 14, borderRadius: radius.md, borderWidth: 1.5 },
   input: { flex: 1, fontSize: 16, height: '100%' },
   suggestBox: { flexShrink: 1 },
   seeAll: { borderTopWidth: StyleSheet.hairlineWidth, paddingVertical: 4 },
   suggest: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 10, paddingHorizontal: 10 },
-  thumb: { width: 40, height: 40, borderRadius: 10, backgroundColor: '#fff', alignItems: 'center', justifyContent: 'center' },
+  thumb: { width: 40, height: 40, borderRadius: 10, alignItems: 'center', justifyContent: 'center' },
   row: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   wrap: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
 });

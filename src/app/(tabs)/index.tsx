@@ -1,17 +1,13 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { Image } from 'expo-image';
+import { LinearGradient } from 'expo-linear-gradient';
 import { router } from 'expo-router';
 import { useEffect, useState } from 'react';
-import { Pressable, RefreshControl, ScrollView, StyleSheet, View } from 'react-native';
+import { Pressable, RefreshControl, ScrollView, StyleSheet, useWindowDimensions, View, type StyleProp, type ViewStyle } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { blogAsset, listBlogs, type BlogPost } from '@/core/api/blogs';
 import { listBrands } from '@/core/api/brands';
-import { listCombos, type Combo } from '@/core/api/combos';
-import { getForYou } from '@/core/api/reco';
-import { useUnreadNotifications } from '@/core/hooks/useUnreadNotifications';
-import { useSaved } from '@/core/saved/SavedContext';
-import { useAuth } from '@/core/auth/AuthContext';
-import { useCart } from '@/core/cart/CartContext';
 import {
   absUrl,
   DOMAIN_META,
@@ -19,303 +15,329 @@ import {
   getBanners,
   getDeals,
   getDomains,
-  getQuickFilters,
+  getGuideBanners,
   getTrending,
   type Banner,
+  type ProductSummary,
+  type Subcategory,
 } from '@/core/api/catalog';
+import { listCombos, type Combo } from '@/core/api/combos';
+import { listNavbharat } from '@/core/api/navbharat';
+import { getForYou } from '@/core/api/reco';
+import { useAuth } from '@/core/auth/AuthContext';
+import { useCart } from '@/core/cart/CartContext';
 import { useAsync } from '@/core/hooks/useAsync';
-import { prefetchAllShops, prefetchShop } from '@/core/shopListing';
 import { openSiteLink } from '@/core/links';
-import { useLocation } from '@/core/location/LocationContext';
-import { IconButton, tap } from '@/ui/Button';
-import { AiOrb } from '@/ui/assistant/AiOrb';
+import { useUnreadNotifications } from '@/core/hooks/useUnreadNotifications';
+import { useSaved } from '@/core/saved/SavedContext';
+import { DEFAULT_SHOP_FILTERS, loadShopPage, loadSubcategories, peekShopPage, prefetchShop } from '@/core/shopListing';
+import { tap } from '@/ui/Button';
 import { BannerCarousel } from '@/ui/BannerCarousel';
-import { BrandTile } from '@/ui/BrandTile';
-import { ComboTile } from '@/ui/ComboTile';
-import { Glass } from '@/ui/Glass';
+import { AiStrip, Bento } from '@/ui/home/Bento';
+import { HEADER_OVERLAP, HomeHeader } from '@/ui/home/HomeHeader';
 import { useRevealStage } from '@/ui/introGate';
-import { LogoLockup, PoweredByOndc } from '@/ui/Logo';
+import { OndcLogo } from '@/ui/Logo';
 import { PincodeSheet } from '@/ui/PincodeSheet';
 import { ProductRail } from '@/ui/ProductRail';
-import { Screen, SectionTitle } from '@/ui/Screen';
-import { Skeleton } from '@/ui/Skeleton';
+import { Screen } from '@/ui/Screen';
 import { Text } from '@/ui/Text';
 import { radius, TAB_BAR_HEIGHT, usePalette } from '@/ui/theme';
+
+type Shelf = { items: ProductSummary[]; subs: Subcategory[] };
 
 export default function HomeScreen() {
   const t = usePalette();
   const insets = useSafeAreaInsets();
+  const { width } = useWindowDimensions();
   const { user } = useAuth();
   const { count } = useCart();
-  const { location } = useLocation();
+  const { recent } = useSaved();
+  const unread = useUnreadNotifications();
   const [pinOpen, setPinOpen] = useState(false);
+  const [picked, setPicked] = useState<string | null>(null); // shelf chip; null = all
 
   // Each strip loads independently (like the website), so one slow or failing
   // source doesn't blank the whole page.
   const banners = useAsync(() => getBanners().catch(() => [] as Banner[]), []);
-  const filters = useAsync(() => getQuickFilters().catch(() => []), []);
   const domains = useAsync(getDomains, []);
   const deals = useAsync(getDeals, []);
   const trending = useAsync(getTrending, []);
+  const navbharat = useAsync(() => listNavbharat({ limit: 6 }).then((p) => p.items).catch(() => [] as ProductSummary[]), []);
   // ~420 kB per call (each brand carries its page HTML), so only the tile's
-  // fields are kept, and like the website it's refreshed every 10 minutes.
+  // fields are kept.
   const brands = useAsync(
     () => listBrands({ featured: true, limit: 12 }).then((p) => p.items.map(({ id, name, slug, logo }) => ({ id, name, slug, logo }))),
     [],
   );
-
-  const refreshing = deals.refreshing || trending.refreshing;
-  const { recent, wishlist } = useSaved();
-  const unread = useUnreadNotifications();
   const combos = useAsync(() => listCombos().catch(() => [] as Combo[]), []);
-  // "Picked for you" comes from the shopper's own orders, so it's loaded
-  // again when the logged-in user changes. Like the website, it needs at
-  // least two products to show.
+  // Photo cards near the bottom: the admin's live app banners, or, when
+  // there are none, the newest blog post.
+  const guides = useAsync(getGuideBanners, []);
+  const latestPost = useAsync(() => listBlogs(1, 1).then((r) => r.items).catch(() => [] as BlogPost[]), []);
+  // "Picked for you" comes from the shopper's own orders; like the website it
+  // needs at least two products to show.
   const forYou = useAsync(() => (user ? getForYou() : Promise.resolve([])), [user?.id]);
 
-  // Once the home strips are in, fetch every category's first page so the
-  // "Shop by category" tiles open a filled list.
-  const homeReady = !deals.loading && !trending.loading;
+  // One shelf per category, from the same cached first page the category
+  // screen opens with. Loaded two categories at a time (a cold listing takes
+  // 10 s+ on the backend), painting any page already in memory at once.
+  const [shelves, setShelves] = useState<Record<string, Shelf>>({});
+  const [shelfRound, setShelfRound] = useState(0);
   useEffect(() => {
-    if (homeReady && domains.data) prefetchAllShops(domains.data.map((d) => d.slug));
-  }, [homeReady, domains.data]);
+    const slugs = (domains.data ?? []).map((d) => d.slug).filter(Boolean);
+    if (!slugs.length) return;
+    let alive = true;
+    const fresh = shelfRound > 0;
+    const queue = [...slugs];
+    const worker = async () => {
+      for (let slug = queue.shift(); slug && alive; slug = queue.shift()) {
+        const [page, subs] = await Promise.all([
+          loadShopPage(slug, DEFAULT_SHOP_FILTERS, 1, fresh).catch(() => null),
+          loadSubcategories(slug, fresh),
+        ]);
+        const s = slug;
+        if (alive) setShelves((prev) => ({ ...prev, [s]: { items: page?.items.slice(0, 10) ?? [], subs } }));
+      }
+    };
+    worker();
+    worker();
+    return () => {
+      alive = false;
+    };
+  }, [domains.data, shelfRound]);
 
-  const onRefresh = () => [banners, filters, domains, deals, trending, brands, combos, forYou].forEach((s) => s.refresh());
+  const refreshing = deals.refreshing || trending.refreshing;
+  const onRefresh = () => {
+    [banners, domains, deals, trending, navbharat, brands, combos, forYou, guides, latestPost].forEach((s) => s.refresh());
+    setShelfRound((n) => n + 1);
+  };
 
-  const firstName = user?.name?.trim().split(/\s+/)[0];
-  // Below the search bar, wait for the launch intro to settle, then mount the
+  // Below the header, wait for the launch intro to settle, then mount the
   // page a few sections per frame, top first (the data is already loading).
-  const stage = useRevealStage(4);
+  const stage = useRevealStage(3);
+  const domainList = domains.data ?? [];
+  const shownDomains = picked ? domainList.filter((d) => d.slug === picked) : domainList;
+  const post = latestPost.data?.[0];
+  // Nothing until the admin banners have answered, so the blog fallback
+  // doesn't flash in first and get swapped out.
+  const guideCards: Guide[] = guides.loading
+    ? []
+    : guides.data?.length
+    ? guides.data.map((g) => ({
+        key: `g${g.id}`,
+        image: g.image,
+        label: g.label.toUpperCase(),
+        title: g.title,
+        open: () => openSiteLink(g.link_url),
+      }))
+    : post
+      ? [
+          {
+            key: `b${post.id}`,
+            image: blogAsset(post.featured_image),
+            label: [(post.category_name || 'Guide').toUpperCase(), shortDate(post.published_at || post.created_at)].filter(Boolean).join(' · '),
+            title: post.title,
+            open: () => router.push({ pathname: '/blog/[slug]', params: { slug: post.slug } }),
+          },
+        ]
+      : [];
 
   return (
-    <Screen>
+    <Screen statusBar="light">
       <ScrollView
-        contentContainerStyle={{ paddingTop: insets.top + 8, paddingBottom: TAB_BAR_HEIGHT + insets.bottom + 32 }}
+        contentContainerStyle={{ paddingBottom: TAB_BAR_HEIGHT + insets.bottom + 24 }}
         showsVerticalScrollIndicator={false}
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={t.primary} />}>
-        {/* Top bar */}
-        <View style={styles.topBar}>
-          <View style={{ flex: 1, gap: 2 }}>
-            <Text variant="caption" tone="muted">
-              {firstName ? `Hi ${firstName} 👋` : 'Welcome to'}
-            </Text>
-            <LogoLockup height={26} />
-          </View>
-          <View style={{ flexDirection: 'row', gap: 10 }}>
-            <IconButton icon="heart-outline" label="Wishlist" badge={wishlist.length} onPress={() => router.push('/wishlist')} />
-            <IconButton icon="notifications-outline" label="Notifications" badge={unread} onPress={() => router.push('/notifications')} />
-            <IconButton icon="bag-handle-outline" label="Cart" badge={count} onPress={() => router.push('/cart')} />
-          </View>
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={t.primary} progressViewOffset={insets.top} />}>
+        <HomeHeader unread={unread} cartCount={count} onPincode={() => setPinOpen(true)} />
+
+        <View style={{ marginTop: -HEADER_OVERLAP, minHeight: HEADER_OVERLAP }}>
+          <BannerCarousel banners={banners.data} loading={banners.loading} aspect={0.45} />
         </View>
-
-        <Pressable onPress={() => setPinOpen(true)} style={styles.locationRow} accessibilityRole="button">
-          <Ionicons name="location" size={16} color={t.primary} />
-          <Text variant="label" numberOfLines={1} style={{ flexShrink: 1 }}>
-            {location ? `Deliver to ${location.label} · ${location.pincode}` : 'Set delivery pincode'}
-          </Text>
-          <Ionicons name="chevron-down" size={14} color={t.textMuted} />
-        </Pressable>
-
-        {/* Search */}
-        <Pressable onPress={() => (tap(), router.push('/search'))} style={{ paddingHorizontal: 16, marginBottom: 18 }}>
-          <Glass radius={radius.md} style={styles.search}>
-            <Ionicons name="search" size={20} color={t.textMuted} />
-            <Text tone="faint" style={{ flex: 1 }}>
-              Search products, brands…
-            </Text>
-            <View style={[styles.searchKbd, { backgroundColor: t.primary }]}>
-              <Ionicons name="arrow-forward" size={16} color="#fff" />
-            </View>
-          </Glass>
-        </Pressable>
 
         {stage >= 1 && (
           <>
-            <BannerCarousel banners={banners.data} loading={banners.loading} />
-
-            {/* Quick filters */}
-            {!!filters.data?.length && (
-              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.pills}>
-                {filters.data.map((f) => (
-                  <Pressable key={f.id} onPress={() => (tap(), openSiteLink(f.href))}>
-                    <Glass radius={radius.pill} style={styles.pill}>
-                      <Ionicons name={pillIcon(f.icon_name)} size={16} color={t.primary} />
-                      <View>
-                        <Text variant="label" style={{ fontSize: 13 }}>
-                          {f.title}
-                        </Text>
-                        {!!f.subtitle && (
-                          <Text variant="tiny" tone="muted">
-                            {f.subtitle}
-                          </Text>
-                        )}
-                      </View>
-                    </Glass>
-                  </Pressable>
-                ))}
-              </ScrollView>
-            )}
-
-            {/* Categories */}
-            <SectionTitle title="Shop by category" action="See all" onAction={() => router.push('/categories')} />
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.catRow}>
-              {(domains.data ?? []).map((d) => {
-                const meta = DOMAIN_META[d.slug];
-                return (
-                  <Pressable
-                    key={d.slug}
-                    style={styles.catItem}
-                    onPressIn={() => prefetchShop(d.slug)}
-                    onPress={() => (tap(), router.push({ pathname: '/shop/[domain]', params: { domain: d.slug } }))}>
-                    <Glass radius={radius.lg} style={styles.catTile}>
-                      {meta ? (
-                        <Image source={{ uri: absUrl(meta.image)! }} style={styles.catImage} contentFit="cover" transition={200} />
-                      ) : (
-                        <Ionicons name="pricetags-outline" size={26} color={t.primary} />
-                      )}
-                    </Glass>
-                    <Text variant="caption" numberOfLines={2} style={{ textAlign: 'center' }}>
-                      {domainName(d)}
-                    </Text>
-                  </Pressable>
-                );
-              })}
-              {domains.loading &&
-                Array.from({ length: 5 }).map((_, i) => (
-                  <View key={i} style={styles.catItem}>
-                    <Skeleton height={CAT_TILE} r={radius.lg} />
-                    <Skeleton width="70%" height={10} />
-                  </View>
-                ))}
-            </ScrollView>
+            <Bento
+              deals={deals.data}
+              trending={trending.data}
+              navbharat={navbharat.data}
+              brands={brands.data}
+              combo={combos.data?.[0]}
+              loading={deals.loading}
+            />
+            <AiStrip />
           </>
         )}
 
         {stage >= 2 && (
           <>
-            {/* Brands: featured strip, "See all" opens the full searchable list */}
-            {(brands.loading || !!brands.data?.length) && (
-              <View style={{ marginTop: 8 }}>
-                <SectionTitle title="Top brands" action="See all" onAction={() => (tap(), router.push('/brands'))} />
-                <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.brandRow}>
-                  {brands.loading
-                    ? Array.from({ length: 4 }).map((_, i) => (
-                        <View key={i} style={{ width: BRAND_TILE, gap: 6 }}>
-                          <Skeleton height={86} r={radius.lg} />
-                          <Skeleton width="70%" height={10} />
-                        </View>
-                      ))
-                    : brands.data!.map((b) => <BrandTile key={b.id} brand={b} width={BRAND_TILE} />)}
-                </ScrollView>
-              </View>
-            )}
+            {/* Shelf chips: all shelves, or just one category's */}
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chips} style={{ marginTop: 18 }}>
+              <ShelfChip label="All shelves" active={!picked} onPress={() => setPicked(null)} />
+              {domainList.map((d) => (
+                <ShelfChip
+                  key={d.slug}
+                  label={domainName(d)}
+                  image={absUrl(DOMAIN_META[d.slug]?.image)}
+                  active={picked === d.slug}
+                  onPress={() => setPicked(picked === d.slug ? null : d.slug)}
+                />
+              ))}
+            </ScrollView>
+            <View style={[styles.divider, { backgroundColor: t.hairline }]} />
 
-            {!!combos.data?.length && (
-              <View style={{ marginTop: 8 }}>
-                <SectionTitle title="ZillyCart combos" action="See all" onAction={() => (tap(), router.push('/combos'))} />
-                <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.brandRow}>
-                  {combos.data.map((c) => (
-                    <ComboTile key={c.zc_id} combo={c} width={240} />
-                  ))}
-                </ScrollView>
-              </View>
-            )}
+            {shownDomains.map((d) => {
+              // A page already in memory paints before this round's load lands.
+              const cached = shelves[d.slug] ? undefined : peekShopPage(d.slug, DEFAULT_SHOP_FILTERS);
+              const shelf = shelves[d.slug] ?? (cached && { items: cached.items.slice(0, 10), subs: [] });
+              const meta = DOMAIN_META[d.slug];
+              const name = domainName(d);
+              return (
+                <ProductRail
+                  key={d.slug}
+                  title={`${name} shelf`}
+                  subtitle={shelf?.subs.length ? shelf.subs.slice(0, 3).map((s) => s.category_name).join(', ') : undefined}
+                  icon={(meta?.icon as keyof typeof Ionicons.glyphMap) ?? 'pricetags-outline'}
+                  image={absUrl(meta?.image)}
+                  items={shelf?.items}
+                  loading={!shelf}
+                  onSeeAll={() => {
+                    prefetchShop(d.slug);
+                    router.push({ pathname: '/shop/[domain]', params: { domain: d.slug } });
+                  }}
+                />
+              );
+            })}
           </>
         )}
 
         {stage >= 3 && (
           <>
-            <ProductRail title="Recently viewed" icon="time-outline" items={recent.slice(0, 12)} loading={false} />
-
-            <ProductRail
-              title="Deals of the day"
-              icon="flash"
-              items={deals.data}
-              loading={deals.loading}
-              onSeeAll={() => router.push({ pathname: '/products', params: { flag: 'deals', title: 'Deals of the day' } })}
-            />
-
-            {(forYou.data?.length ?? 0) >= 2 && (
-              <ProductRail title="Picked for you" icon="sparkles" items={forYou.data} loading={false} />
+            {!picked && (forYou.data?.length ?? 0) >= 2 && (
+              <ProductRail title="Picked for you" subtitle="Based on your orders" icon="sparkles" items={forYou.data} loading={false} />
             )}
-          </>
-        )}
+            {!picked && (
+              <ProductRail title="Recently viewed" subtitle="Pick up where you left off" icon="time-outline" items={recent.slice(0, 12)} loading={false} />
+            )}
 
-        {stage >= 4 && (
-          <>
-            <ProductRail
-              title="Trending now"
-              icon="trending-up"
-              items={trending.data}
-              loading={trending.loading}
-              onSeeAll={() => router.push({ pathname: '/products', params: { flag: 'featured', title: 'Trending now' } })}
-            />
+            {/* Guide cards: the admin's app banners, or else the newest blog post */}
+            {guideCards.length === 1 ? (
+              <GuideCard card={guideCards[0]} width={width - 32} style={{ marginHorizontal: 16, marginTop: 26 }} />
+            ) : guideCards.length > 1 ? (
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                snapToInterval={width - 32 - 24 + 10}
+                decelerationRate="fast"
+                contentContainerStyle={{ paddingHorizontal: 16, gap: 10 }}
+                style={{ marginTop: 26 }}>
+                {guideCards.map((card) => (
+                  <GuideCard key={card.key} card={card} width={width - 32 - 24} />
+                ))}
+              </ScrollView>
+            ) : null}
 
-            {/* Trust strip */}
-            <Glass radius={radius.lg} style={styles.trust}>
+            <View style={styles.trust}>
               {[
-                ['shield-checkmark-outline', 'Secure payments'],
-                ['cube-outline', 'ONDC sellers'],
+                ['lock-closed-outline', 'Secure payments'],
+                ['checkmark-circle-outline', 'Verified sellers'],
                 ['refresh-outline', 'Easy returns'],
               ].map(([icon, label]) => (
                 <View key={label} style={styles.trustItem}>
-                  <Ionicons name={icon as any} size={22} color={t.primary} />
-                  <Text variant="tiny" tone="muted" style={{ textAlign: 'center' }}>
+                  <Ionicons name={icon as keyof typeof Ionicons.glyphMap} size={17} color={t.primary} />
+                  <Text variant="caption" tone="muted">
                     {label}
                   </Text>
                 </View>
               ))}
-            </Glass>
-
-            <PoweredByOndc style={{ marginTop: 24 }} />
+            </View>
+            <View style={styles.powered}>
+              <Text variant="caption" tone="faint">
+                Powered by
+              </Text>
+              <OndcLogo height={22} />
+            </View>
           </>
         )}
       </ScrollView>
-
-      {/* ZillyAI launcher, floating above the tab bar */}
-      <Pressable
-        accessibilityRole="button"
-        accessibilityLabel="Ask ZillyAI"
-        onPress={() => (tap(), router.push('/assistant'))}
-        style={({ pressed }) => [
-          styles.aiLauncher,
-          { bottom: TAB_BAR_HEIGHT + Math.max(insets.bottom, 12) + 14, transform: [{ scale: pressed ? 0.95 : 1 }] },
-        ]}>
-        <Glass strong radius={radius.pill} style={styles.aiPill}>
-          <AiOrb size={34} pulse />
-          <Text variant="label" style={{ fontSize: 13 }}>
-            Ask ZillyAI
-          </Text>
-        </Glass>
-      </Pressable>
 
       <PincodeSheet visible={pinOpen} onClose={() => setPinOpen(false)} />
     </Screen>
   );
 }
 
-const BRAND_TILE = 96;
-const CAT_TILE = 76;
+type Guide = { key: string; image: string | null; label: string; title: string; open: () => void };
 
-const pillIcon = (name?: string): keyof typeof Ionicons.glyphMap =>
-  (({ tag: 'pricetag', flame: 'flame', percent: 'pricetags', sparkles: 'sparkles', zap: 'flash' }) as const)[
-    name as 'tag'
-  ] ?? 'pricetag';
+// Photo with the label and title over a dark fade at the bottom.
+function GuideCard({ card, width, style }: { card: Guide; width: number; style?: StyleProp<ViewStyle> }) {
+  const t = usePalette();
+  return (
+    <Pressable
+      accessibilityRole="link"
+      accessibilityLabel={card.title}
+      onPress={() => (tap(), card.open())}
+      style={({ pressed }) => [styles.promo, { width, backgroundColor: t.tileFill, opacity: pressed ? 0.9 : 1 }, style]}>
+      <Image source={card.image ? { uri: card.image } : undefined} style={{ width, height: Math.round(width * 0.375) }} contentFit="cover" transition={250} />
+      <LinearGradient
+        colors={['transparent', 'rgba(20,20,28,0.55)', 'rgba(20,20,28,0.78)']}
+        locations={[0.25, 0.55, 1]}
+        style={StyleSheet.absoluteFill}
+      />
+      <View style={styles.promoText}>
+        {!!card.label && (
+          <Text variant="tiny" style={{ color: 'rgba(255,255,255,0.9)', letterSpacing: 1.2, fontWeight: '800' }}>
+            {card.label}
+          </Text>
+        )}
+        <Text variant="heading" tone="onPrimary" numberOfLines={2} style={{ fontSize: 16, lineHeight: 21 }}>
+          {card.title}
+        </Text>
+      </View>
+    </Pressable>
+  );
+}
+
+// "28 OCT"
+function shortDate(iso?: string | null) {
+  const d = iso ? new Date(iso) : null;
+  return d && !Number.isNaN(d.getTime()) ? d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short' }).toUpperCase() : '';
+}
+
+function ShelfChip({ label, image, active, onPress }: { label: string; image?: string | null; active: boolean; onPress: () => void }) {
+  const t = usePalette();
+  const on = t.dark ? '#FFFFFF' : '#0B1B33';
+  return (
+    <Pressable
+      accessibilityRole="tab"
+      accessibilityState={{ selected: active }}
+      onPress={() => (tap(), onPress())}
+      style={[
+        styles.chip,
+        active ? { backgroundColor: on, borderColor: on } : { backgroundColor: t.glassFill, borderColor: t.glassBorder },
+      ]}>
+      {image && <Image source={{ uri: image }} style={styles.chipImage} contentFit="cover" />}
+      <Text variant="caption" style={{ fontWeight: '700', color: active ? (t.dark ? '#0B1B33' : '#FFFFFF') : t.text }}>
+        {label}
+      </Text>
+    </Pressable>
+  );
+}
 
 const styles = StyleSheet.create({
-  topBar: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, marginBottom: 6 },
-  locationRow: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 16, marginBottom: 14 },
-  search: { flexDirection: 'row', alignItems: 'center', gap: 10, height: 54, paddingLeft: 16, paddingRight: 7 },
-  searchKbd: { width: 40, height: 40, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
-  pills: { paddingHorizontal: 16, gap: 10, marginBottom: 22 },
-  pill: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 14, paddingVertical: 9 },
-  catRow: { paddingHorizontal: 16, gap: 12, marginBottom: 14 },
-  catItem: { width: CAT_TILE, alignItems: 'center', gap: 6 },
-  catTile: { width: CAT_TILE, height: CAT_TILE, alignItems: 'center', justifyContent: 'center', overflow: 'hidden' },
-  catImage: { width: '100%', height: '100%' },
-  aiLauncher: { position: 'absolute', right: 16 },
-  aiPill: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingLeft: 5, paddingRight: 14, paddingVertical: 5 },
-  brandRow: { paddingHorizontal: 16, gap: 10 },
-  trust: { flexDirection: 'row', marginHorizontal: 16, marginTop: 28, paddingVertical: 16 },
-  trustItem: { flex: 1, alignItems: 'center', gap: 6 },
+  chips: { paddingHorizontal: 16, gap: 8 },
+  chip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    height: 36,
+    paddingHorizontal: 12,
+    borderRadius: radius.pill,
+    borderWidth: 1,
+  },
+  chipImage: { width: 24, height: 24, borderRadius: 12, marginLeft: -6 },
+  divider: { height: 1, marginTop: 14 },
+  promo: { borderRadius: 20, overflow: 'hidden' },
+  promoText: { position: 'absolute', left: 16, right: 16, bottom: 14, gap: 4 },
+  trust: { flexDirection: 'row', justifyContent: 'center', flexWrap: 'wrap', columnGap: 16, rowGap: 8, marginTop: 22, paddingHorizontal: 16 },
+  trustItem: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  powered: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, marginTop: 10 },
 });

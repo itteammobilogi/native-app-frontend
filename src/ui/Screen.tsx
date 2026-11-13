@@ -1,27 +1,41 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
-import { router } from 'expo-router';
+import { router, useIsFocused } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
-import { StyleSheet, View, type StyleProp, type ViewStyle } from 'react-native';
+import { Pressable, StyleSheet, View, type StyleProp, type ViewStyle } from 'react-native';
 import { SafeAreaInsetsContext, useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Background } from './Background';
-import { Button, IconButton } from './Button';
+import { Button, tap } from './Button';
 import { Glass } from './Glass';
 import { PageTabBar, tabBarSpace, type TabName } from './GlassTabBar';
 import { TabBarSpace } from './tabBarSpace';
 import { Text } from './Text';
 import { usePalette } from './theme';
 
-// Gradient backdrop + status bar for every screen. With `tabBar`, the page
+// Page colour + status bar for every screen (`statusBar` overrides the icon
+// colour, e.g. light over the home page's blue header). With `tabBar`, the page
 // also shows the bottom tab bar (that tab highlighted), and everything inside
 // sees a bottom inset that includes the bar, so content pads clear of it.
-export function Screen({ children, style, tabBar }: { children: React.ReactNode; style?: StyleProp<ViewStyle>; tabBar?: TabName }) {
+export function Screen({
+  children,
+  style,
+  tabBar,
+  statusBar,
+}: {
+  children: React.ReactNode;
+  style?: StyleProp<ViewStyle>;
+  tabBar?: TabName;
+  statusBar?: 'light' | 'dark';
+}) {
   const t = usePalette();
+  // Only the screen on display sets the status bar, so tabs kept mounted in
+  // the background don't override it.
+  const focused = useIsFocused();
   const insets = useSafeAreaInsets();
   const space = tabBar ? tabBarSpace(insets.bottom) : 0;
   return (
     <View style={[{ flex: 1 }, style]}>
-      <StatusBar style={t.dark ? 'light' : 'dark'} />
+      {focused && <StatusBar style={statusBar ?? (t.dark ? 'light' : 'dark')} />}
       <Background />
       {tabBar ? (
         <>
@@ -37,24 +51,27 @@ export function Screen({ children, style, tabBar }: { children: React.ReactNode;
   );
 }
 
-// Floating header for stack screens: glass back button, title, optional right slot.
+// Header bar for stack screens: back arrow, title, optional right slot, on a
+// solid surface with a hairline under it.
 export function Header({ title, right, back = true }: { title?: string; right?: React.ReactNode; back?: boolean }) {
+  const t = usePalette();
   const insets = useSafeAreaInsets();
   return (
-    <View style={[styles.header, { paddingTop: insets.top + 8 }]}>
-      {back ? (
-        <IconButton
-          icon="chevron-back"
-          label="Back"
-          onPress={() => (router.canGoBack() ? router.back() : router.replace('/'))}
-        />
-      ) : (
-        <View style={{ width: 42 }} />
+    <View style={[styles.header, { paddingTop: insets.top + 6, backgroundColor: t.glassFill, borderBottomColor: t.hairline }]}>
+      {back && (
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Back"
+          hitSlop={8}
+          style={styles.back}
+          onPress={() => (tap(), router.canGoBack() ? router.back() : router.replace('/'))}>
+          <Ionicons name="arrow-back" size={22} color={t.text} />
+        </Pressable>
       )}
-      <Text variant="heading" numberOfLines={1} style={{ flex: 1, textAlign: 'center' }}>
+      <Text variant="heading" numberOfLines={1} style={{ flex: 1, marginLeft: back ? 0 : 8 }}>
         {title}
       </Text>
-      <View style={{ minWidth: 42, alignItems: 'flex-end' }}>{right}</View>
+      {right}
     </View>
   );
 }
@@ -110,7 +127,8 @@ export function SectionTitle({ title, action, onAction }: { title: string; actio
 }
 
 const styles = StyleSheet.create({
-  header: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 16, paddingBottom: 10 },
+  header: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 8, paddingBottom: 8, borderBottomWidth: StyleSheet.hairlineWidth },
+  back: { width: 40, height: 40, alignItems: 'center', justifyContent: 'center' },
   empty: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 10, padding: 32 },
   emptyIcon: { width: 96, height: 96, alignItems: 'center', justifyContent: 'center', marginBottom: 8 },
   section: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, marginBottom: 12 },

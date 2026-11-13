@@ -1,7 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Animated, View, type DimensionValue, type StyleProp, type ViewStyle } from 'react-native';
 
-import { Glass } from './Glass';
 import { radius, usePalette } from './theme';
 
 export function Skeleton({
@@ -32,14 +31,10 @@ export function Skeleton({
 
 export function ProductCardSkeleton({ width }: { width?: number }) {
   return (
-    <Glass radius={radius.lg} style={{ width, padding: 10, gap: 10, flex: width ? undefined : 1 }}>
-      <Skeleton height={140} r={radius.md} />
-      <Skeleton width="85%" />
-      <Skeleton width="50%" />
-      <View style={{ flexDirection: 'row', gap: 8 }}>
-        <Skeleton width={60} height={18} />
-        <Skeleton width={40} height={18} />
-      </View>
-    </Glass>
+    <View style={{ width, gap: 8, flex: width ? undefined : 1 }}>
+      <Skeleton height="auto" r={radius.md} style={{ aspectRatio: 1 }} />
+      <Skeleton width="90%" height={11} />
+      <Skeleton width="55%" height={11} />
+    </View>
   );
 }
